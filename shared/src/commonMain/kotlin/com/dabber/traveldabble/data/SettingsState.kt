@@ -75,6 +75,7 @@ data class UserPreferences(
 
     // AI
     val openRouterApiKey: String? = null,
+    val selectedAiModel: String = "google/gemma-4-26b-a4b-it:free",
     val aiSuggestionsEnabled: Boolean = true,
 
     // Preferences
@@ -128,6 +129,7 @@ object SettingsState {
     val map3DEnabled: Boolean get() = preferences.map3DEnabled
     val defaultToShowLocation: Boolean get() = preferences.defaultToShowLocation
     val openRouterApiKey: String? get() = preferences.openRouterApiKey
+    val selectedAiModel: String get() = preferences.selectedAiModel
     val aiSuggestionsEnabled: Boolean get() = preferences.aiSuggestionsEnabled
     val unitSystem: UnitSystem get() = preferences.unitSystem
     val language: LanguageSetting get() = preferences.language
@@ -210,6 +212,12 @@ object SettingsState {
         AuthState.updateOpenRouterApiKey(key)
     }
 
+    fun updateSelectedAiModel(model: String) {
+        preferences = preferences.copy(selectedAiModel = model)
+        savePreferences()
+        AuthState.updateSelectedAiModel(model)
+    }
+
     fun updateAiSuggestionsEnabled(enabled: Boolean) {
         preferences = preferences.copy(aiSuggestionsEnabled = enabled)
         savePreferences()
@@ -263,5 +271,24 @@ object SettingsState {
     fun syncWithAuthState() {
         AuthState.updateTelemetryOptOut(preferences.telemetryOptOut)
         AuthState.updateOpenRouterApiKey(preferences.openRouterApiKey)
+        AuthState.updateSelectedAiModel(preferences.selectedAiModel)
     }
 }
+
+data class AiModelOption(
+    val id: String,
+    val name: String,
+    val description: String,
+    val isFree: Boolean = false,
+)
+
+val AVAILABLE_AI_MODELS = listOf(
+    AiModelOption("google/gemma-4-26b-a4b-it:free", "Gemma 4 26B (Free)", "Google lightweight open-weights instruction model", isFree = true),
+    AiModelOption("meta-llama/llama-3.3-70b-instruct:free", "Llama 3.3 70B (Free)", "Meta high-capability 70B open-weights LLM", isFree = true),
+    AiModelOption("deepseek/deepseek-r1:free", "DeepSeek R1 (Free)", "Advanced reasoning open model", isFree = true),
+    AiModelOption("openai/gpt-4o-mini", "GPT-4o Mini", "Fast and intelligent reasoning by OpenAI", isFree = false),
+    AiModelOption("openai/gpt-4o", "GPT-4o", "OpenAI flagship multimodal intelligence", isFree = false),
+    AiModelOption("anthropic/claude-3.5-sonnet", "Claude 3.5 Sonnet", "Anthropic state-of-the-art reasoning model", isFree = false),
+    AiModelOption("google/gemini-2.0-flash-001", "Gemini 2.0 Flash", "Ultra-fast next-generation Google AI", isFree = false),
+    AiModelOption("meta-llama/llama-3.1-8b-instruct", "Llama 3.1 8B", "Fast and compact Meta model", isFree = false),
+)

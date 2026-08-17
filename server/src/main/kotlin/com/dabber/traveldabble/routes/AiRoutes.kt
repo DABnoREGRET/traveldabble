@@ -7,6 +7,7 @@ import com.dabber.traveldabble.util.rateLimited
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation as ClientContentNegotiation
+import io.ktor.client.request.get as clientGet
 import io.ktor.client.request.header
 import io.ktor.client.request.post as clientPost
 import io.ktor.client.request.setBody
@@ -49,7 +50,7 @@ private val SERVER_OPENROUTER_KEY: String?
     get() = System.getenv("OPENROUTER_API_KEY")
 
 private const val OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
-private const val DEFAULT_MODEL = "openai/gpt-4o-mini"
+private const val DEFAULT_MODEL = "google/gemma-4-26b-a4b-it:free"
 private const val MAX_TOOL_ROUNDS = 6
 
 private val httpClient by lazy {
@@ -131,17 +132,60 @@ fun Route.AiRoutes() {
         }
 
         get("/models") {
+            try {
+                val openRouterResp = httpClient.clientGet("https://openrouter.ai/api/v1/models") {
+                    header("HTTP-Referer", "https://traveldabble.app")
+                    header("X-Title", "TravelDabble")
+                }
+                if (openRouterResp.status.value in 200..299) {
+                    val responseJson = Json.parseToJsonElement(openRouterResp.bodyAsText()).jsonObject
+                    val data = responseJson["data"]?.jsonArray
+                    if (!data.isNullOrEmpty()) {
+                        val models = data.mapNotNull { item ->
+                            val obj = item.jsonObject
+                            val id = obj["id"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+                            val name = obj["name"]?.jsonPrimitive?.contentOrNull ?: id
+                            val description = obj["description"]?.jsonPrimitive?.contentOrNull ?: ""
+                            val pricing = obj["pricing"]?.jsonObject
+                            val isFree = id.endsWith(":free") || (
+                                pricing?.get("prompt")?.jsonPrimitive?.contentOrNull == "0" &&
+                                pricing?.get("completion")?.jsonPrimitive?.contentOrNull == "0"
+                            )
+                            buildJsonObject {
+                                put("id", JsonPrimitive(id))
+                                put("name", JsonPrimitive(name))
+                                put("description", JsonPrimitive(description.take(150)))
+                                put("is_free", JsonPrimitive(isFree))
+                            }
+                        }
+                        call.respond(buildJsonObject {
+                            put("default_model", JsonPrimitive(DEFAULT_MODEL))
+                            put("available_models", kotlinx.serialization.json.JsonArray(models.map { it["id"]!! }))
+                            put("models", kotlinx.serialization.json.JsonArray(models))
+                            put("server_key_configured", JsonPrimitive(!SERVER_OPENROUTER_KEY.isNullOrBlank()))
+                        })
+                        return@get
+                    }
+                }
+            } catch (_: Exception) {
+                // Fallback to default models if OpenRouter API is unreachable or rate-limited
+            }
+
+            val fallbackModels = listOf(
+                buildJsonObject { put("id", JsonPrimitive("google/gemma-4-26b-a4b-it:free")); put("name", JsonPrimitive("Gemma 4 26B (Free)")); put("description", JsonPrimitive("Google lightweight open-weights instruction model")); put("is_free", JsonPrimitive(true)) },
+                buildJsonObject { put("id", JsonPrimitive("meta-llama/llama-3.3-70b-instruct:free")); put("name", JsonPrimitive("Llama 3.3 70B (Free)")); put("description", JsonPrimitive("Meta high-capability 70B open-weights LLM")); put("is_free", JsonPrimitive(true)) },
+                buildJsonObject { put("id", JsonPrimitive("deepseek/deepseek-r1:free")); put("name", JsonPrimitive("DeepSeek R1 (Free)")); put("description", JsonPrimitive("Advanced reasoning open model")); put("is_free", JsonPrimitive(true)) },
+                buildJsonObject { put("id", JsonPrimitive("openai/gpt-4o-mini")); put("name", JsonPrimitive("GPT-4o Mini")); put("description", JsonPrimitive("Fast and intelligent reasoning by OpenAI")); put("is_free", JsonPrimitive(false)) },
+                buildJsonObject { put("id", JsonPrimitive("openai/gpt-4o")); put("name", JsonPrimitive("GPT-4o")); put("description", JsonPrimitive("OpenAI flagship multimodal intelligence")); put("is_free", JsonPrimitive(false)) },
+                buildJsonObject { put("id", JsonPrimitive("anthropic/claude-3.5-sonnet")); put("name", JsonPrimitive("Claude 3.5 Sonnet")); put("description", JsonPrimitive("Anthropic state-of-the-art reasoning model")); put("is_free", JsonPrimitive(false)) },
+                buildJsonObject { put("id", JsonPrimitive("google/gemini-2.0-flash-001")); put("name", JsonPrimitive("Gemini 2.0 Flash")); put("description", JsonPrimitive("Ultra-fast next-generation Google AI")); put("is_free", JsonPrimitive(false)) },
+                buildJsonObject { put("id", JsonPrimitive("meta-llama/llama-3.1-8b-instruct")); put("name", JsonPrimitive("Llama 3.1 8B")); put("description", JsonPrimitive("Fast and compact Meta model")); put("is_free", JsonPrimitive(false)) },
+            )
+
             call.respond(buildJsonObject {
                 put("default_model", JsonPrimitive(DEFAULT_MODEL))
-                put("available_models", kotlinx.serialization.json.JsonArray(
-                    listOf(
-                        "openai/gpt-4o-mini",
-                        "openai/gpt-4o",
-                        "anthropic/claude-3.5-sonnet",
-                        "google/gemini-2.0-flash-001",
-                        "meta-llama/llama-3.1-8b-instruct",
-                    ).map { JsonPrimitive(it) }
-                ))
+                put("available_models", kotlinx.serialization.json.JsonArray(fallbackModels.map { it["id"]!! }))
+                put("models", kotlinx.serialization.json.JsonArray(fallbackModels))
                 put("server_key_configured", JsonPrimitive(!SERVER_OPENROUTER_KEY.isNullOrBlank()))
             })
         }

@@ -27,12 +27,15 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -52,10 +55,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
+import com.dabber.traveldabble.data.AVAILABLE_AI_MODELS
+import com.dabber.traveldabble.data.AiModelOption
 import com.dabber.traveldabble.data.AiResult
 import com.dabber.traveldabble.data.AiService
 import com.dabber.traveldabble.data.AuthState
 import com.dabber.traveldabble.data.LocalChatStorage
+import com.dabber.traveldabble.data.SettingsState
 import com.dabber.traveldabble.data.ToolExecutionEvent
 import com.dabber.traveldabble.data.ToolResult
 import com.dabber.traveldabble.ui.components.GlassCard
@@ -103,12 +109,13 @@ fun AiChatScreen(
     var showApiKeyPrompt by remember { mutableStateOf(false) }
     var apiKeyInput by remember { mutableStateOf("") }
     var aiStatus by remember { mutableStateOf<String?>(null) }
+    var availableModels by remember { mutableStateOf(AVAILABLE_AI_MODELS) }
 
     // Tool execution tracking
     val toolEvents = remember { mutableStateListOf<ToolEventDisplay>() }
     var currentToolName by remember { mutableStateOf<String?>(null) }
 
-    // Check AI health on mount
+    // Check AI health and fetch live models on mount
     LaunchedEffect(Unit) {
         val health = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             AiService.checkHealth()
@@ -117,6 +124,12 @@ fun AiChatScreen(
             health.serverKeyConfigured -> null
             AuthState.openRouterApiKey != null -> null
             else -> "No AI key configured. Add your OpenRouter key in Profile settings."
+        }
+        val liveModels = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            AiService.fetchModels()
+        }
+        if (liveModels.isNotEmpty()) {
+            availableModels = liveModels
         }
     }
 
@@ -153,9 +166,10 @@ fun AiChatScreen(
             }
             Column(modifier = Modifier.weight(1f)) {
                 Text("Travel Copilot", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface)
+                val activeModelName = AVAILABLE_AI_MODELS.find { it.id == AuthState.selectedAiModel }?.name ?: "Gemma 4 26B (Free)"
                 val modeText = when {
-                    AuthState.openRouterApiKey != null -> "Using custom OpenRouter key"
-                    else -> "Local / Server AI"
+                    AuthState.openRouterApiKey != null -> "BYOK • $activeModelName"
+                    else -> "Server AI • $activeModelName"
                 }
                 Text(modeText, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
             }
@@ -397,9 +411,12 @@ fun AiChatScreen(
     if (showApiKeyPrompt) {
         ApiKeyDialog(
             currentKey = AuthState.openRouterApiKey,
+            currentModel = AuthState.selectedAiModel,
+            models = availableModels,
             onDismiss = { showApiKeyPrompt = false },
-            onSave = { key ->
-                AuthState.updateOpenRouterApiKey(key)
+            onSave = { key, model ->
+                SettingsState.updateOpenRouterApiKey(key)
+                SettingsState.updateSelectedAiModel(model)
                 showApiKeyPrompt = false
                 aiStatus = if (key.isNullOrBlank()) {
                     scope.launch {
@@ -513,10 +530,24 @@ private fun ToolEventCard(event: ToolEventDisplay) {
 @Composable
 private fun ApiKeyDialog(
     currentKey: String?,
+    currentModel: String,
+    models: List<AiModelOption> = AVAILABLE_AI_MODELS,
     onDismiss: () -> Unit,
-    onSave: (String?) -> Unit,
+    onSave: (String?, String) -> Unit,
 ) {
     var keyInput by remember { mutableStateOf(currentKey ?: "") }
+    var selectedModel by remember { mutableStateOf(currentModel) }
+    var showModelDropdown by remember { mutableStateOf(false) }
+    var modelSearchQuery by remember { mutableStateOf("") }
+
+    val filteredModels = remember(models, modelSearchQuery) {
+        if (modelSearchQuery.isBlank()) models
+        else models.filter {
+            it.name.contains(modelSearchQuery, ignoreCase = true) ||
+            it.id.contains(modelSearchQuery, ignoreCase = true) ||
+            it.description.contains(modelSearchQuery, ignoreCase = true)
+        }
+    }
 
     GlassCard(
         modifier = Modifier
@@ -527,12 +558,14 @@ private fun ApiKeyDialog(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text("AI API Key", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
+            Text("AI Travel Copilot Configuration", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
             Text(
-                "Enter your OpenRouter API key to use your own AI credits. Leave empty to use the server's key.",
+                "Configure your Bring-Your-Own-Key (BYOK) OpenRouter API key and preferred AI model. Leave the key empty to use the server's default AI.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+
+            Text("OpenRouter API Key", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -547,12 +580,106 @@ private fun ApiKeyDialog(
                     modifier = Modifier.fillMaxWidth(),
                 )
                 if (keyInput.isEmpty()) {
-                    Text("sk-or-...", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
+                    Text("sk-or-v1-...", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
                 }
             }
+
+            Text("AI Model Selection", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+            val currentModelObj = models.find { it.id == selectedModel }
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .glass(RoundedCornerShape(12.dp), GlassIntensity.Standard)
+                    .clickable { showModelDropdown = true }
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            Text(
+                                text = currentModelObj?.name ?: selectedModel,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                            if (currentModelObj?.isFree == true) {
+                                Text(
+                                    "FREE",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = AuroraTeal,
+                                )
+                            }
+                        }
+                        currentModelObj?.description?.let {
+                            Text(
+                                text = it,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                    Icon(
+                        Icons.Filled.ArrowDropDown,
+                        contentDescription = "Select AI model",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+
+                DropdownMenu(
+                    expanded = showModelDropdown,
+                    onDismissRequest = { showModelDropdown = false },
+                ) {
+                    filteredModels.forEach { modelOption ->
+                        DropdownMenuItem(
+                            text = {
+                                Column(modifier = Modifier.padding(vertical = 4.dp)) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    ) {
+                                        Text(
+                                            modelOption.name,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = if (modelOption.id == selectedModel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                                        )
+                                        if (modelOption.isFree) {
+                                            Text(
+                                                "FREE",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = AuroraTeal,
+                                            )
+                                        }
+                                    }
+                                    Text(
+                                        modelOption.description,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            },
+                            onClick = {
+                                selectedModel = modelOption.id
+                                showModelDropdown = false
+                            },
+                        )
+                    }
+                }
+            }
+
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                GlassChip(label = "Clear", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.clickable { onSave(null) })
-                GlassChip(label = "Save", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.clickable { onSave(keyInput) })
+                GlassChip(label = "Clear Key", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.clickable {
+                    keyInput = ""
+                    onSave(null, selectedModel)
+                })
+                GlassChip(label = "Save", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.clickable {
+                    onSave(keyInput.takeIf { it.isNotBlank() }, selectedModel)
+                })
                 GlassChip(label = "Cancel", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.clickable { onDismiss() })
             }
         }

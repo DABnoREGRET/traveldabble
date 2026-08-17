@@ -116,6 +116,31 @@ class AiServiceMockTest {
     }
 
     @Test
+    fun testSendMessageWithCustomModelSelection() = runTest {
+        var capturedRequestBody: String? = null
+
+        val mockClient = createMockHttpClient { request ->
+            capturedRequestBody = (request.body as io.ktor.http.content.TextContent).text
+            respond(
+                content = """{"content":"Response from Gemma 4!","model":"google/gemma-4-26b-a4b-it:free","byok":true}""",
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, "application/json")
+            )
+        }
+
+        ApiClient.setMockHttpClient(mockClient)
+        val result = AiService.sendMessage(
+            tripId = "test-trip",
+            userMessage = "Hello Gemma",
+            byokKey = "sk-openrouter-key",
+            model = "google/gemma-4-26b-a4b-it:free"
+        )
+
+        assertTrue(result is AiResult.Success)
+        assertTrue(capturedRequestBody!!.contains("google/gemma-4-26b-a4b-it:free"))
+    }
+
+    @Test
     fun testSendMessageWithToolExecutionLoop() = runTest {
         var aiChatRound = 0
         val toolEvents = mutableListOf<ToolExecutionEvent>()
@@ -196,5 +221,43 @@ class AiServiceMockTest {
         assertEquals("Found great destinations in Vietnam for you!", result.content)
         assertEquals(2, aiChatRound)
         assertTrue(toolEvents.isNotEmpty(), "Expected tool execution events to be emitted")
+    }
+
+    @Test
+    fun testFetchModelsDynamic() = runTest {
+        val mockClient = createMockHttpClient {
+            respond(
+                content = """
+                {
+                  "default_model": "google/gemma-4-26b-a4b-it:free",
+                  "models": [
+                    {
+                      "id": "google/gemma-4-26b-a4b-it:free",
+                      "name": "Google: Gemma 4 26B (free)",
+                      "description": "Gemma 4 instruction model",
+                      "is_free": true
+                    },
+                    {
+                      "id": "anthropic/claude-3.5-sonnet",
+                      "name": "Anthropic: Claude 3.5 Sonnet",
+                      "description": "SOTA reasoning",
+                      "is_free": false
+                    }
+                  ]
+                }
+                """.trimIndent(),
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, "application/json")
+            )
+        }
+
+        ApiClient.setMockHttpClient(mockClient)
+        val models = AiService.fetchModels()
+
+        assertEquals(2, models.size)
+        assertEquals("google/gemma-4-26b-a4b-it:free", models[0].id)
+        assertTrue(models[0].isFree)
+        assertEquals("anthropic/claude-3.5-sonnet", models[1].id)
+        assertFalse(models[1].isFree)
     }
 }

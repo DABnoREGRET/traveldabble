@@ -17,13 +17,18 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -35,12 +40,16 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.dabber.traveldabble.data.AVAILABLE_AI_MODELS
+import com.dabber.traveldabble.data.AiModelOption
+import com.dabber.traveldabble.data.AiService
 import com.dabber.traveldabble.data.ApiClient
 import com.dabber.traveldabble.data.AuthState
 import com.dabber.traveldabble.data.DEFAULT_BASE_URL
 import com.dabber.traveldabble.data.SettingsState
 import com.dabber.traveldabble.ui.components.GlassCard
 import com.dabber.traveldabble.ui.components.GlassIconButton
+import com.dabber.traveldabble.ui.theme.AuroraTeal
 import com.dabber.traveldabble.ui.theme.Danger
 import kotlinx.coroutines.launch
 
@@ -53,6 +62,23 @@ fun AccountSettingsScreen(onBack: () -> Unit) {
     var serverInput by remember { mutableStateOf(SettingsState.customServerUrl ?: "") }
     var connectionStatus by remember { mutableStateOf<Boolean?>(null) }
     var isTesting by remember { mutableStateOf(false) }
+
+    // AI BYOK & Model selection dialog state
+    var showAiDialog by remember { mutableStateOf(false) }
+    var aiKeyInput by remember { mutableStateOf(SettingsState.openRouterApiKey ?: "") }
+    var selectedAiModel by remember { mutableStateOf(SettingsState.selectedAiModel) }
+    var showModelDropdown by remember { mutableStateOf(false) }
+    var availableModels by remember { mutableStateOf(AVAILABLE_AI_MODELS) }
+
+    LaunchedEffect(Unit) {
+        val liveModels = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            AiService.fetchModels()
+        }
+        if (liveModels.isNotEmpty()) {
+            availableModels = liveModels
+        }
+    }
+
     val coroutineScope = rememberCoroutineScope()
 
     Column(
@@ -139,13 +165,18 @@ fun AccountSettingsScreen(onBack: () -> Unit) {
                 )
             }
 
-            // AI API Key
+            // AI API Key & Model (BYOK)
             GlassCard(contentPadding = 14.dp) {
+                val activeModelName = AVAILABLE_AI_MODELS.find { it.id == SettingsState.selectedAiModel }?.name ?: SettingsState.selectedAiModel
                 AccountAction(
-                    label = "AI Travel Copilot Key (BYOK)",
-                    description = SettingsState.openRouterApiKey?.let { "Custom OpenRouter key configured" }
-                        ?: "Using default local / server AI",
-                    onClick = { /* Open API key */ },
+                    label = "AI Travel Copilot & BYOK",
+                    description = SettingsState.openRouterApiKey?.let { "Custom Key • $activeModelName" }
+                        ?: "Server AI • $activeModelName",
+                    onClick = {
+                        aiKeyInput = SettingsState.openRouterApiKey ?: ""
+                        selectedAiModel = SettingsState.selectedAiModel
+                        showAiDialog = true
+                    },
                 )
             }
 
@@ -233,6 +264,152 @@ fun AccountSettingsScreen(onBack: () -> Unit) {
                         },
                     ) {
                         Text(if (isTesting) "Testing..." else "Test")
+                    }
+                }
+            },
+        )
+    }
+
+    // AI BYOK & Model Dialog
+    if (showAiDialog) {
+        AlertDialog(
+            onDismissRequest = { showAiDialog = false },
+            title = { Text("AI Copilot & BYOK") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        "Enter your OpenRouter API key to use your own AI credits, or leave it blank to use the server's AI. Choose your preferred AI model below.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+
+                    OutlinedTextField(
+                        value = aiKeyInput,
+                        onValueChange = { aiKeyInput = it },
+                        label = { Text("OpenRouter API Key") },
+                        placeholder = { Text("sk-or-v1-...") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+
+                    Text(
+                        "AI Model Selection",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+
+                    val currentModelObj = availableModels.find { it.id == selectedAiModel }
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { showModelDropdown = true }
+                            .padding(vertical = 4.dp),
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                ) {
+                                    Text(
+                                        text = currentModelObj?.name ?: selectedAiModel,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                    )
+                                    if (currentModelObj?.isFree == true) {
+                                        Text(
+                                            "FREE",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = AuroraTeal,
+                                        )
+                                    }
+                                }
+                                currentModelObj?.description?.let {
+                                    Text(
+                                        text = it,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                            Icon(
+                                Icons.Filled.ArrowDropDown,
+                                contentDescription = "Select AI model",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+
+                        DropdownMenu(
+                            expanded = showModelDropdown,
+                            onDismissRequest = { showModelDropdown = false },
+                        ) {
+                            availableModels.forEach { modelOption ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Column(modifier = Modifier.padding(vertical = 4.dp)) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                            ) {
+                                                Text(
+                                                    modelOption.name,
+                                                    style = MaterialTheme.typography.bodyMedium,
+                                                    color = if (modelOption.id == selectedAiModel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                                                )
+                                                if (modelOption.isFree) {
+                                                    Text(
+                                                        "FREE",
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = AuroraTeal,
+                                                    )
+                                                }
+                                            }
+                                            Text(
+                                                modelOption.description,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
+                                        }
+                                    },
+                                    onClick = {
+                                        selectedAiModel = modelOption.id
+                                        showModelDropdown = false
+                                    },
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        SettingsState.updateOpenRouterApiKey(aiKeyInput.takeIf { it.isNotBlank() })
+                        SettingsState.updateSelectedAiModel(selectedAiModel)
+                        showAiDialog = false
+                    },
+                ) {
+                    Text("Save")
+                }
+            },
+            dismissButton = {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(
+                        onClick = {
+                            aiKeyInput = ""
+                            SettingsState.updateOpenRouterApiKey(null)
+                            SettingsState.updateSelectedAiModel("google/gemma-4-26b-a4b-it:free")
+                            showAiDialog = false
+                        },
+                    ) {
+                        Text("Reset Key")
+                    }
+                    TextButton(onClick = { showAiDialog = false }) {
+                        Text("Cancel")
                     }
                 }
             },

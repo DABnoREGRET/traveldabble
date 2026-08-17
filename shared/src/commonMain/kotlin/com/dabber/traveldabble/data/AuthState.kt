@@ -56,6 +56,10 @@ object AuthState {
     var openRouterApiKey by mutableStateOf<String?>(null)
         private set
 
+    /** Selected AI Model for OpenRouter (used especially when BYOK is active). */
+    var selectedAiModel by mutableStateOf("google/gemma-4-26b-a4b-it:free")
+        private set
+
     init {
         restoreAuth()
     }
@@ -105,6 +109,10 @@ object AuthState {
 
     fun updateOpenRouterApiKey(key: String?) {
         openRouterApiKey = key?.takeIf { it.isNotBlank() }
+    }
+
+    fun updateSelectedAiModel(model: String) {
+        selectedAiModel = model
     }
 
     fun onLoginSuccess(response: AuthResponse) {

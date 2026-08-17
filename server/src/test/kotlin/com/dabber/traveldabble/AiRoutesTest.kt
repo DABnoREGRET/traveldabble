@@ -32,10 +32,10 @@ class AiRoutesTest {
         val res = client.get("/api/ai/models")
         assertEquals(HttpStatusCode.OK, res.status, "aiModels: ${res.bodyAsText()}")
         val body = Json.parseToJsonElement(res.bodyAsText()).jsonObject
-        assertEquals("openai/gpt-4o-mini", body["default_model"]!!.jsonPrimitive.content)
+        assertEquals("google/gemma-4-26b-a4b-it:free", body["default_model"]!!.jsonPrimitive.content)
         val models = body["available_models"]!!.jsonArray
         assertTrue(models.isNotEmpty(), "Should return at least one available model")
-        assertTrue(models.any { it.jsonPrimitive.content.contains("openai") }, "Expected an OpenAI model in the list")
+        assertTrue(models.any { it.jsonPrimitive.content.contains("gemma") }, "Expected Gemma model in the list")
         assertNotNull(body["server_key_configured"])
     }
 

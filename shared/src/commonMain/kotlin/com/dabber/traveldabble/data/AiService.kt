@@ -2,6 +2,7 @@ package com.dabber.traveldabble.data
 
 import com.dabber.traveldabble.model.LocalChatMessage
 import io.ktor.client.call.body
+import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
@@ -67,6 +68,7 @@ object AiService {
         tripId: String,
         userMessage: String,
         byokKey: String? = null,
+        model: String? = null,
         onToolExecuted: ((ToolExecutionEvent) -> Unit)? = null,
     ): AiResult {
         // Build message history from local storage
@@ -97,6 +99,8 @@ object AiService {
         messages.addAll(history)
         messages.add(AiChatMessage(role = "user", content = userMessage))
 
+        val effectiveModel = model ?: AuthState.selectedAiModel
+
         // Tool-calling loop (client-side tools)
         var round = 0
         while (round < MAX_CLIENT_TOOL_ROUNDS) {
@@ -106,7 +110,7 @@ object AiService {
 
             val requestBody = json.encodeToString(
                 AiChatRequest.serializer(),
-                AiChatRequest(messages = messages, clientTools = clientToolsJson)
+                AiChatRequest(messages = messages, model = effectiveModel, clientTools = clientToolsJson)
             )
 
             val rawResponse: String = try {
@@ -201,6 +205,31 @@ object AiService {
             )
         } catch (e: Exception) {
             AiHealthStatus(available = false, serverKeyConfigured = false)
+        }
+    }
+
+    /**
+     * Dynamically fetch available OpenRouter models from the server / OpenRouter public API.
+     */
+    suspend fun fetchModels(): List<AiModelOption> {
+        return try {
+            val rawResponse: String = ApiClient.httpClient.get("${ApiClient.baseUrl}/api/ai/models").body()
+            val responseJson = json.parseToJsonElement(rawResponse).jsonObject
+            val modelsArray = responseJson["models"]?.jsonArray
+            if (!modelsArray.isNullOrEmpty()) {
+                modelsArray.mapNotNull { item ->
+                    val obj = item.jsonObject
+                    val id = obj["id"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+                    val name = obj["name"]?.jsonPrimitive?.contentOrNull ?: id
+                    val description = obj["description"]?.jsonPrimitive?.contentOrNull ?: ""
+                    val isFree = obj["is_free"]?.jsonPrimitive?.contentOrNull?.toBooleanStrictOrNull() ?: false
+                    AiModelOption(id, name, description, isFree)
+                }
+            } else {
+                AVAILABLE_AI_MODELS
+            }
+        } catch (_: Exception) {
+            AVAILABLE_AI_MODELS
         }
     }
 }
