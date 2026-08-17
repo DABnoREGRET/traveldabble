@@ -55,7 +55,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
-import com.dabber.traveldabble.data.AVAILABLE_AI_MODELS
 import com.dabber.traveldabble.data.AiModelOption
 import com.dabber.traveldabble.data.AiResult
 import com.dabber.traveldabble.data.AiService
@@ -109,7 +108,7 @@ fun AiChatScreen(
     var showApiKeyPrompt by remember { mutableStateOf(false) }
     var apiKeyInput by remember { mutableStateOf("") }
     var aiStatus by remember { mutableStateOf<String?>(null) }
-    var availableModels by remember { mutableStateOf(AVAILABLE_AI_MODELS) }
+    var availableModels by remember { mutableStateOf<List<AiModelOption>>(emptyList()) }
 
     // Tool execution tracking
     val toolEvents = remember { mutableStateListOf<ToolEventDisplay>() }
@@ -166,7 +165,8 @@ fun AiChatScreen(
             }
             Column(modifier = Modifier.weight(1f)) {
                 Text("Travel Copilot", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface)
-                val activeModelName = AVAILABLE_AI_MODELS.find { it.id == AuthState.selectedAiModel }?.name ?: "Gemma 4 26B (Free)"
+                val activeModelName = availableModels.find { it.id == AuthState.selectedAiModel }?.name
+                    ?: AuthState.selectedAiModel.substringAfterLast("/").replace(":free", " (Free)").replace("-", " ")
                 val modeText = when {
                     AuthState.openRouterApiKey != null -> "BYOK • $activeModelName"
                     else -> "Server AI • $activeModelName"
@@ -531,7 +531,7 @@ private fun ToolEventCard(event: ToolEventDisplay) {
 private fun ApiKeyDialog(
     currentKey: String?,
     currentModel: String,
-    models: List<AiModelOption> = AVAILABLE_AI_MODELS,
+    models: List<AiModelOption> = emptyList(),
     onDismiss: () -> Unit,
     onSave: (String?, String) -> Unit,
 ) {

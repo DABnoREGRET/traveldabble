@@ -40,7 +40,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import com.dabber.traveldabble.data.AVAILABLE_AI_MODELS
 import com.dabber.traveldabble.data.AiModelOption
 import com.dabber.traveldabble.data.AiService
 import com.dabber.traveldabble.data.ApiClient
@@ -68,7 +67,7 @@ fun AccountSettingsScreen(onBack: () -> Unit) {
     var aiKeyInput by remember { mutableStateOf(SettingsState.openRouterApiKey ?: "") }
     var selectedAiModel by remember { mutableStateOf(SettingsState.selectedAiModel) }
     var showModelDropdown by remember { mutableStateOf(false) }
-    var availableModels by remember { mutableStateOf(AVAILABLE_AI_MODELS) }
+    var availableModels by remember { mutableStateOf<List<AiModelOption>>(emptyList()) }
 
     LaunchedEffect(Unit) {
         val liveModels = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
@@ -167,7 +166,8 @@ fun AccountSettingsScreen(onBack: () -> Unit) {
 
             // AI API Key & Model (BYOK)
             GlassCard(contentPadding = 14.dp) {
-                val activeModelName = AVAILABLE_AI_MODELS.find { it.id == SettingsState.selectedAiModel }?.name ?: SettingsState.selectedAiModel
+                val activeModelName = availableModels.find { it.id == SettingsState.selectedAiModel }?.name
+                    ?: SettingsState.selectedAiModel.substringAfterLast("/").replace(":free", " (Free)").replace("-", " ")
                 AccountAction(
                     label = "AI Travel Copilot & BYOK",
                     description = SettingsState.openRouterApiKey?.let { "Custom Key • $activeModelName" }

@@ -171,21 +171,19 @@ fun Route.AiRoutes() {
                 // Fallback to default models if OpenRouter API is unreachable or rate-limited
             }
 
-            val fallbackModels = listOf(
-                buildJsonObject { put("id", JsonPrimitive("google/gemma-4-26b-a4b-it:free")); put("name", JsonPrimitive("Gemma 4 26B (Free)")); put("description", JsonPrimitive("Google lightweight open-weights instruction model")); put("is_free", JsonPrimitive(true)) },
-                buildJsonObject { put("id", JsonPrimitive("meta-llama/llama-3.3-70b-instruct:free")); put("name", JsonPrimitive("Llama 3.3 70B (Free)")); put("description", JsonPrimitive("Meta high-capability 70B open-weights LLM")); put("is_free", JsonPrimitive(true)) },
-                buildJsonObject { put("id", JsonPrimitive("deepseek/deepseek-r1:free")); put("name", JsonPrimitive("DeepSeek R1 (Free)")); put("description", JsonPrimitive("Advanced reasoning open model")); put("is_free", JsonPrimitive(true)) },
-                buildJsonObject { put("id", JsonPrimitive("openai/gpt-4o-mini")); put("name", JsonPrimitive("GPT-4o Mini")); put("description", JsonPrimitive("Fast and intelligent reasoning by OpenAI")); put("is_free", JsonPrimitive(false)) },
-                buildJsonObject { put("id", JsonPrimitive("openai/gpt-4o")); put("name", JsonPrimitive("GPT-4o")); put("description", JsonPrimitive("OpenAI flagship multimodal intelligence")); put("is_free", JsonPrimitive(false)) },
-                buildJsonObject { put("id", JsonPrimitive("anthropic/claude-3.5-sonnet")); put("name", JsonPrimitive("Claude 3.5 Sonnet")); put("description", JsonPrimitive("Anthropic state-of-the-art reasoning model")); put("is_free", JsonPrimitive(false)) },
-                buildJsonObject { put("id", JsonPrimitive("google/gemini-2.0-flash-001")); put("name", JsonPrimitive("Gemini 2.0 Flash")); put("description", JsonPrimitive("Ultra-fast next-generation Google AI")); put("is_free", JsonPrimitive(false)) },
-                buildJsonObject { put("id", JsonPrimitive("meta-llama/llama-3.1-8b-instruct")); put("name", JsonPrimitive("Llama 3.1 8B")); put("description", JsonPrimitive("Fast and compact Meta model")); put("is_free", JsonPrimitive(false)) },
+            val fallback = listOf(
+                buildJsonObject {
+                    put("id", JsonPrimitive(DEFAULT_MODEL))
+                    put("name", JsonPrimitive("Gemma 4 26B (Free)"))
+                    put("description", JsonPrimitive("Default free OpenRouter model"))
+                    put("is_free", JsonPrimitive(true))
+                }
             )
 
             call.respond(buildJsonObject {
                 put("default_model", JsonPrimitive(DEFAULT_MODEL))
-                put("available_models", kotlinx.serialization.json.JsonArray(fallbackModels.map { it["id"]!! }))
-                put("models", kotlinx.serialization.json.JsonArray(fallbackModels))
+                put("available_models", kotlinx.serialization.json.JsonArray(fallback.map { it["id"]!! }))
+                put("models", kotlinx.serialization.json.JsonArray(fallback))
                 put("server_key_configured", JsonPrimitive(!SERVER_OPENROUTER_KEY.isNullOrBlank()))
             })
         }

@@ -226,10 +226,10 @@ object AiService {
                     AiModelOption(id, name, description, isFree)
                 }
             } else {
-                AVAILABLE_AI_MODELS
+                listOf(AiModelOption(DEFAULT_AI_MODEL, "Gemma 4 26B (Free)", isFree = true))
             }
         } catch (_: Exception) {
-            AVAILABLE_AI_MODELS
+            listOf(AiModelOption(DEFAULT_AI_MODEL, "Gemma 4 26B (Free)", isFree = true))
         }
     }
 }
