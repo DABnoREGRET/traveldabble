@@ -41,6 +41,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -88,8 +89,12 @@ fun ProfileScreen(
 
     val listState = rememberLazyListState()
 
-    LaunchedEffect(listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset) {
-        ScrollState.onScroll(listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset)
+    // Efficiently detect scroll events without coroutine recreation
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset }
+            .collect { (index, offset) ->
+                ScrollState.onScroll(index, offset)
+            }
     }
 
     LazyColumn(

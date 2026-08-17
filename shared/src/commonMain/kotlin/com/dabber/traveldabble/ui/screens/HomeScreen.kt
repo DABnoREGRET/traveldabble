@@ -72,6 +72,8 @@ import com.dabber.traveldabble.ui.map.TravelMap
 import com.dabber.traveldabble.ui.navigation.ScrollState
 import com.dabber.traveldabble.ui.theme.AuroraGold
 
+import androidx.compose.runtime.snapshotFlow
+
 @Composable
 fun HomeScreen(
     onTripClick: (String) -> Unit,
@@ -98,9 +100,12 @@ fun HomeScreen(
 
     val listState = rememberLazyListState()
 
-    // Detect scroll events for bottom bar visibility
-    LaunchedEffect(listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset) {
-        ScrollState.onScroll(listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset)
+    // Efficiently detect scroll events without coroutine recreation
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset }
+            .collect { (index, offset) ->
+                ScrollState.onScroll(index, offset)
+            }
     }
 
     LazyColumn(

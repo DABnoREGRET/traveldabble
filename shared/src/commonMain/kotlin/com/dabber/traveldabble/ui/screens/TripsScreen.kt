@@ -30,6 +30,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -64,9 +65,12 @@ fun TripsScreen(
 
     val listState = rememberLazyListState()
 
-    // Detect scroll events for bottom bar visibility
-    LaunchedEffect(listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset) {
-        ScrollState.onScroll(listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset)
+    // Efficiently detect scroll events without coroutine recreation
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset }
+            .collect { (index, offset) ->
+                ScrollState.onScroll(index, offset)
+            }
     }
 
     LazyColumn(
@@ -159,7 +163,7 @@ fun TripsScreen(
                         modifier = Modifier.padding(horizontal = 20.dp),
                     )
                 }
-                items(upcoming) { trip ->
+                items(upcoming, key = { it.id }) { trip ->
                     TripListCard(trip, onClick = { onTripClick(trip.id) })
                 }
             }
@@ -175,7 +179,7 @@ fun TripsScreen(
                             .padding(top = 8.dp),
                     )
                 }
-                items(past) { trip ->
+                items(past, key = { it.id }) { trip ->
                     TripListCard(trip, onClick = { onTripClick(trip.id) }, muted = true)
                 }
             }
