@@ -8,9 +8,9 @@ import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
 
 /**
- * Platform default base URL for local development:
- * - JVM / Desktop: http://localhost:8080
- * - Android: http://10.0.2.2:8080 (maps to host localhost from emulator)
+ * Default base URL for the backend API:
+ * - Production: https://travel-dabble-server.onrender.com
+ * - Configurable via Settings -> Server Connection in the app.
  */
 expect val DEFAULT_BASE_URL: String
 

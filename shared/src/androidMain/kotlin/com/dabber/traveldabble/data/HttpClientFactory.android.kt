@@ -10,7 +10,7 @@ import javax.net.ssl.SSLContext
 import javax.net.ssl.TrustManager
 import javax.net.ssl.X509TrustManager
 
-actual val DEFAULT_BASE_URL: String = "http://10.0.2.2:8080"
+actual val DEFAULT_BASE_URL: String = "https://travel-dabble-server.onrender.com"
 
 actual fun createHttpClient(): HttpClient {
     val trustAllCerts = arrayOf<TrustManager>(object : X509TrustManager {
