@@ -1,11 +1,14 @@
 package com.dabber.traveldabble.config
 
+import com.dabber.traveldabble.db.*
 import com.dabber.traveldabble.seed.SeedData
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
 import io.ktor.server.config.ApplicationConfig
 import org.flywaydb.core.Flyway
 import org.jetbrains.exposed.sql.Database
+import org.jetbrains.exposed.sql.SchemaUtils
+import org.jetbrains.exposed.sql.transactions.transaction
 import java.net.URI
 import java.net.URLDecoder
 import javax.sql.DataSource
@@ -42,8 +45,8 @@ object DatabaseFactory {
     ) {
         val (jdbcUrl, user, password) = resolveDbUrl(rawUrl, defaultUser, defaultPassword)
         dataSource = hikari(jdbcUrl, user, password, maxPoolSize)
-        migrate(dataSource)
         Database.connect(dataSource)
+        migrate(dataSource)
         SeedData.seed()
     }
 
@@ -84,10 +87,35 @@ object DatabaseFactory {
     }
 
     private fun migrate(ds: DataSource) {
-        Flyway.configure()
-            .dataSource(ds)
-            .baselineOnMigrate(true)
-            .load()
-            .migrate()
+        try {
+            Flyway.configure(DatabaseFactory::class.java.classLoader)
+                .dataSource(ds)
+                .locations("classpath:db/migration")
+                .baselineOnMigrate(true)
+                .baselineVersion("0")
+                .load()
+                .migrate()
+        } catch (e: Exception) {
+            println("Flyway migration notice: ${e.message}")
+        }
+
+        transaction {
+            SchemaUtils.createMissingTablesAndColumns(
+                Users,
+                Trips,
+                DayPlans,
+                Places,
+                Activities,
+                Budgets,
+                Expenses,
+                Destinations,
+                TripMembers,
+                InviteCodes,
+                Telemetry,
+                Notifications,
+                UserFcmTokens,
+                ItemsTable
+            )
+        }
     }
 }
