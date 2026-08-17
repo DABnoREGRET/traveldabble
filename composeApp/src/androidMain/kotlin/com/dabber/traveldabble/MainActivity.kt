@@ -9,7 +9,9 @@ import androidx.compose.ui.tooling.preview.Preview
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
-        enableEdgeToEdge()
+        try {
+            enableEdgeToEdge()
+        } catch (_: Throwable) {}
         super.onCreate(savedInstanceState)
 
         // Lets the shared UI layer (commonMain) trigger the runtime location

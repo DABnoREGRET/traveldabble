@@ -18,7 +18,7 @@ object LocalChatStorage {
     private val kvSettings by lazy {
         try {
             Settings()
-        } catch (_: Exception) {
+        } catch (_: Throwable) {
             null
         }
     }
@@ -43,7 +43,7 @@ object LocalChatStorage {
             } else {
                 emptyList()
             }
-        } catch (_: Exception) {
+        } catch (_: Throwable) {
             emptyList()
         }
     }
@@ -60,7 +60,7 @@ object LocalChatStorage {
         try {
             val serialized = json.encodeToString(list)
             kvSettings?.putString(storageKey(message.tripId), serialized)
-        } catch (_: Exception) {
+        } catch (_: Throwable) {
             // Never crash the UI on storage failure
         }
     }
@@ -72,7 +72,7 @@ object LocalChatStorage {
         inMemoryCache.remove(tripId)
         try {
             kvSettings?.remove(storageKey(tripId))
-        } catch (_: Exception) {}
+        } catch (_: Throwable) {}
     }
 
     /**
@@ -87,7 +87,7 @@ object LocalChatStorage {
         try {
             val serialized = json.encodeToString(list)
             kvSettings?.putString(storageKey(tripId), serialized)
-        } catch (_: Exception) {}
+        } catch (_: Throwable) {}
     }
 
     /**

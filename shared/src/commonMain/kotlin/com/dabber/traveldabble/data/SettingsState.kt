@@ -107,7 +107,7 @@ object SettingsState {
     private val kvSettings by lazy {
         try {
             Settings()
-        } catch (_: Exception) {
+        } catch (_: Throwable) {
             null
         }
     }
@@ -147,17 +147,16 @@ object SettingsState {
             } else {
                 UserPreferences()
             }
-        } catch (_: Exception) {
+        } catch (_: Throwable) {
             UserPreferences()
         }
     }
 
     private fun savePreferences() {
         try {
-            val serialized = json.encodeToString(preferences)
-            kvSettings?.putString(PREFS_KEY, serialized)
-        } catch (_: Exception) {
-            // Settings persistence must never crash the app
+            kvSettings?.putString(PREFS_KEY, json.encodeToString(preferences))
+        } catch (_: Throwable) {
+            // Preferences persistence must never crash the UI
         }
     }
 

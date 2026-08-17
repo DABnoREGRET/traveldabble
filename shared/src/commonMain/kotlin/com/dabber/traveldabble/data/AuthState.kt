@@ -24,7 +24,7 @@ object AuthState {
     private val kvSettings by lazy {
         try {
             Settings()
-        } catch (_: Exception) {
+        } catch (_: Throwable) {
             null
         }
     }
@@ -77,7 +77,7 @@ object AuthState {
                     ApiClient.setToken(data.token)
                 }
             }
-        } catch (_: Exception) {
+        } catch (_: Throwable) {
             // Start fresh if corrupted
         }
     }
@@ -91,7 +91,7 @@ object AuthState {
                 email = currentUser?.email,
             )
             kvSettings?.putString(AUTH_KEY, json.encodeToString(data))
-        } catch (_: Exception) {
+        } catch (_: Throwable) {
             // Auth persistence must never crash the app
         }
     }
@@ -99,7 +99,7 @@ object AuthState {
     private fun clearAuth() {
         try {
             kvSettings?.remove(AUTH_KEY)
-        } catch (_: Exception) {}
+        } catch (_: Throwable) {}
     }
 
     fun updateTelemetryOptOut(enabled: Boolean) {

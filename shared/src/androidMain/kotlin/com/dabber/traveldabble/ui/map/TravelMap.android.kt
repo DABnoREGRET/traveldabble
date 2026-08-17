@@ -6,9 +6,14 @@ import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.RectF
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
@@ -116,22 +121,40 @@ actual fun TravelMap(
     val lifecycleOwner = LocalLifecycleOwner.current
 
     val mapView = remember {
-        MapLibre.getInstance(context)
-        MapView(context)
+        try {
+            MapLibre.getInstance(context)
+            MapView(context)
+        } catch (_: Throwable) {
+            null
+        }
     }
 
-    DisposableEffect(lifecycleOwner) {
+    if (mapView == null) {
+        Box(
+            modifier = modifier.background(MaterialTheme.colorScheme.surfaceVariant),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                "Map view unavailable on this device architecture",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        return
+    }
+
+    DisposableEffect(lifecycleOwner, mapView) {
         val observer = object : DefaultLifecycleObserver {
-            override fun onStart(owner: LifecycleOwner) = mapView.onStart()
-            override fun onResume(owner: LifecycleOwner) = mapView.onResume()
-            override fun onPause(owner: LifecycleOwner) = mapView.onPause()
-            override fun onStop(owner: LifecycleOwner) = mapView.onStop()
-            override fun onDestroy(owner: LifecycleOwner) = mapView.onDestroy()
+            override fun onStart(owner: LifecycleOwner) = try { mapView.onStart() } catch (_: Throwable) {}
+            override fun onResume(owner: LifecycleOwner) = try { mapView.onResume() } catch (_: Throwable) {}
+            override fun onPause(owner: LifecycleOwner) = try { mapView.onPause() } catch (_: Throwable) {}
+            override fun onStop(owner: LifecycleOwner) = try { mapView.onStop() } catch (_: Throwable) {}
+            override fun onDestroy(owner: LifecycleOwner) = try { mapView.onDestroy() } catch (_: Throwable) {}
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
-            mapView.onDestroy()
+            try { mapView.onDestroy() } catch (_: Throwable) {}
         }
     }
 
