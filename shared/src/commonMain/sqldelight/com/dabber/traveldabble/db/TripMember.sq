@@ -1,0 +1,25 @@
+CREATE TABLE TripMemberEntity (
+    id TEXT PRIMARY KEY NOT NULL,
+    tripId TEXT NOT NULL,
+    userId TEXT NOT NULL,
+    displayName TEXT NOT NULL,
+    email TEXT NOT NULL,
+    role TEXT NOT NULL,
+    joinedAt INTEGER NOT NULL
+);
+
+selectByTripId:
+SELECT * FROM TripMemberEntity WHERE tripId = ? ORDER BY joinedAt ASC;
+
+upsert:
+INSERT OR REPLACE INTO TripMemberEntity(id, tripId, userId, displayName, email, role, joinedAt)
+VALUES (?, ?, ?, ?, ?, ?, ?);
+
+deleteByTripAndUser:
+DELETE FROM TripMemberEntity WHERE tripId = ? AND userId = ?;
+
+deleteByTripId:
+DELETE FROM TripMemberEntity WHERE tripId = ?;
+
+deleteAll:
+DELETE FROM TripMemberEntity;

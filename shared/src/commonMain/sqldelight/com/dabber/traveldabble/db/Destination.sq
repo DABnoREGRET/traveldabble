@@ -1,0 +1,25 @@
+CREATE TABLE DestinationEntity (
+    id TEXT PRIMARY KEY NOT NULL,
+    name TEXT NOT NULL,
+    country TEXT NOT NULL,
+    tagline TEXT NOT NULL,
+    rating REAL NOT NULL,
+    tagsJson TEXT NOT NULL,
+    coverColorsJson TEXT NOT NULL
+);
+
+selectAll:
+SELECT * FROM DestinationEntity ORDER BY name ASC;
+
+selectById:
+SELECT * FROM DestinationEntity WHERE id = ?;
+
+upsert:
+INSERT OR REPLACE INTO DestinationEntity(id, name, country, tagline, rating, tagsJson, coverColorsJson)
+VALUES (?, ?, ?, ?, ?, ?, ?);
+
+deleteById:
+DELETE FROM DestinationEntity WHERE id = ?;
+
+deleteAll:
+DELETE FROM DestinationEntity;

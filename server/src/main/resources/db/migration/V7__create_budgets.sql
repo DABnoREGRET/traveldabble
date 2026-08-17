@@ -1,0 +1,6 @@
+CREATE TABLE IF NOT EXISTS budgets (
+    id UUID PRIMARY KEY,
+    trip_id UUID NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+    total DOUBLE PRECISION NOT NULL,
+    categories TEXT NOT NULL
+);

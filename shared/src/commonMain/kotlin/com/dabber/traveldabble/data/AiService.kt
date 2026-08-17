@@ -1,0 +1,218 @@
+package com.dabber.traveldabble.data
+
+import com.dabber.traveldabble.model.LocalChatMessage
+import io.ktor.client.call.body
+import io.ktor.client.request.header
+import io.ktor.client.request.post
+import io.ktor.client.request.setBody
+import io.ktor.http.ContentType
+import io.ktor.http.contentType
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+
+@Serializable
+data class AiChatRequest(
+    val messages: List<AiChatMessage>,
+    val model: String? = null,
+    val clientTools: String? = null,
+)
+
+@Serializable
+data class AiChatMessage(val role: String, val content: String)
+
+@Serializable
+data class AiChatResponse(
+    val content: String,
+    val model: String,
+    val byok: Boolean = false,
+    val clientToolCalls: List<ClientToolCall>? = null,
+)
+
+@Serializable
+data class ClientToolCall(
+    val id: String,
+    val name: String,
+    val arguments: String,
+)
+
+@Serializable
+private data class AiHealthResponse(val status: String, val server_key_configured: Boolean, val message: String = "")
+
+/**
+ * AI service with tool-calling support.
+ *
+ * Flow:
+ * 1. Send message + client tool definitions to server
+ * 2. Server executes destination tools automatically
+ * 3. Server returns clientToolCalls for tools we need to execute locally
+ * 4. We execute client tools, collect results, send follow-up
+ * 5. Repeat until AI gives final text response
+ */
+object AiService {
+    private val json = Json { ignoreUnknownKeys = true }
+    private const val MAX_CONTEXT_MESSAGES = 20
+    private const val MAX_CLIENT_TOOL_ROUNDS = 4
+
+    /**
+     * Send a chat message and handle tool execution.
+     * Returns a flow of events for the UI to render.
+     */
+    suspend fun sendMessage(
+        tripId: String,
+        userMessage: String,
+        byokKey: String? = null,
+        onToolExecuted: ((ToolExecutionEvent) -> Unit)? = null,
+    ): AiResult {
+        // Build message history from local storage
+        val history = LocalChatStorage.loadMessages(tripId)
+            .takeLast(MAX_CONTEXT_MESSAGES)
+            .map { msg ->
+                AiChatMessage(
+                    role = if (msg.senderId == "ai") "assistant" else "user",
+                    content = msg.text,
+                )
+            }
+
+        // System prompt with tool usage instructions
+        val systemMessage = AiChatMessage(
+            role = "system",
+            content = buildString {
+                append("You are Travel Copilot, an expert travel planning assistant for TravelDabble. ")
+                append("You help users plan trips, find destinations, create itineraries, and discover local experiences. ")
+                append("You have access to tools that can manage the user's trips, search destinations, and navigate the app. ")
+                append("When a user asks you to create, update, or delete a trip, use the appropriate tool. ")
+                append("When you create or reference a trip, use show_trip to navigate to it. ")
+                append("Be helpful, concise, and enthusiastic about travel. ")
+                append("Respond in the same language the user writes in.")
+            }
+        )
+
+        val messages = mutableListOf(systemMessage)
+        messages.addAll(history)
+        messages.add(AiChatMessage(role = "user", content = userMessage))
+
+        // Tool-calling loop (client-side tools)
+        var round = 0
+        while (round < MAX_CLIENT_TOOL_ROUNDS) {
+            round++
+
+            val clientToolsJson = AiToolDefinitions.toJson()
+
+            val requestBody = json.encodeToString(
+                AiChatRequest.serializer(),
+                AiChatRequest(messages = messages, clientTools = clientToolsJson)
+            )
+
+            val rawResponse: String = try {
+                ApiClient.httpClient.post("${ApiClient.baseUrl}/api/ai/chat") {
+                    contentType(ContentType.Application.Json)
+                    setBody(requestBody)
+                    byokKey?.let { header("X-Api-Key", it) }
+                    ApiClient.getToken()?.let { token ->
+                        header("Authorization", "Bearer $token")
+                    }
+                }.body()
+            } catch (e: Exception) {
+                return AiResult.Error(e.message ?: "AI service unavailable")
+            }
+
+            val responseJson = json.parseToJsonElement(rawResponse).jsonObject
+            val content = responseJson["content"]?.jsonPrimitive?.contentOrNull ?: ""
+            val clientToolCallsRaw = responseJson["clientToolCalls"]?.jsonArray
+            val byok = responseJson["byok"]?.jsonPrimitive?.contentOrNull?.toBooleanStrictOrNull() ?: false
+
+            // No client tools to execute → return final response
+            if (clientToolCallsRaw.isNullOrEmpty()) {
+                return AiResult.Success(content, byok)
+            }
+
+            // Execute client-side tools
+            val toolResults = mutableListOf<Pair<String, String>>() // tool_call_id, result_json
+
+            for (tc in clientToolCallsRaw) {
+                val tcObj = tc.jsonObject
+                val toolCallId = tcObj["id"]?.jsonPrimitive?.contentOrNull ?: continue
+                val toolName = tcObj["name"]?.jsonPrimitive?.contentOrNull ?: continue
+                val toolArgsRaw = tcObj["arguments"]?.jsonPrimitive?.contentOrNull ?: "{}"
+                val toolArgs = try {
+                    json.parseToJsonElement(toolArgsRaw).jsonObject
+                } catch (_: Exception) { null }
+
+                // Notify UI of tool execution
+                onToolExecuted?.invoke(ToolExecutionEvent.Started(toolName, toolArgs))
+
+                val result = AiToolExecutor.execute(toolName, toolArgs)
+
+                val resultJson = when (result) {
+                    is ToolResult.Success -> json.encodeToString(
+                        ToolResult.Success.serializer(),
+                        result
+                    )
+                    is ToolResult.Error -> json.encodeToString(
+                        ToolResult.Error.serializer(),
+                        result
+                    )
+                }
+
+                toolResults.add(toolCallId to resultJson)
+                onToolExecuted?.invoke(ToolExecutionEvent.Completed(toolName, result))
+            }
+
+            // Add assistant message with tool calls to history
+            messages.add(AiChatMessage(role = "assistant", content = content))
+            // Add tool results as follow-up messages
+            for ((toolCallId, resultJson) in toolResults) {
+                messages.add(AiChatMessage(
+                    role = "user",
+                    content = "[Tool result for $toolCallId]: $resultJson"
+                ))
+            }
+
+            // If no content from AI but tools were executed, continue loop
+            // so AI can generate a natural language summary
+            if (content.isBlank() && toolResults.isNotEmpty()) {
+                continue
+            }
+
+            // Return with content (tools were already executed, UI was notified)
+            return AiResult.Success(content, byok)
+        }
+
+        return AiResult.Success("I processed your request. Please check the results.", false)
+    }
+
+    /**
+     * Check AI service health.
+     */
+    suspend fun checkHealth(): AiHealthStatus {
+        return try {
+            val response: AiHealthResponse = ApiClient.httpClient.post("${ApiClient.baseUrl}/api/ai/health") {
+                // No auth needed for health check
+            }.body()
+            AiHealthStatus(
+                available = true,
+                serverKeyConfigured = response.server_key_configured,
+            )
+        } catch (e: Exception) {
+            AiHealthStatus(available = false, serverKeyConfigured = false)
+        }
+    }
+}
+
+sealed class AiResult {
+    data class Success(val content: String, val usedByok: Boolean) : AiResult()
+    data class Error(val message: String) : AiResult()
+}
+
+data class AiHealthStatus(val available: Boolean, val serverKeyConfigured: Boolean)
+
+sealed class ToolExecutionEvent {
+    data class Started(val toolName: String, val args: JsonObject?) : ToolExecutionEvent()
+    data class Completed(val toolName: String, val result: ToolResult) : ToolExecutionEvent()
+}

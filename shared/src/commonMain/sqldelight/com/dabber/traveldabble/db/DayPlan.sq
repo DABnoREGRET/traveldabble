@@ -1,0 +1,22 @@
+CREATE TABLE DayPlanEntity (
+    id TEXT PRIMARY KEY NOT NULL,
+    tripId TEXT NOT NULL,
+    dayNumber INTEGER NOT NULL,
+    dateLabel TEXT NOT NULL
+);
+
+selectByTripId:
+SELECT * FROM DayPlanEntity WHERE tripId = ? ORDER BY dayNumber ASC;
+
+upsert:
+INSERT OR REPLACE INTO DayPlanEntity(id, tripId, dayNumber, dateLabel)
+VALUES (?, ?, ?, ?);
+
+deleteByTripId:
+DELETE FROM DayPlanEntity WHERE tripId = ?;
+
+deleteById:
+DELETE FROM DayPlanEntity WHERE id = ?;
+
+deleteAll:
+DELETE FROM DayPlanEntity;

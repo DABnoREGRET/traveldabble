@@ -1,0 +1,32 @@
+CREATE TABLE TelemetryEntity (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp INTEGER NOT NULL,
+    eventType TEXT NOT NULL,
+    userId TEXT,
+    endpoint TEXT,
+    method TEXT,
+    statusCode INTEGER,
+    responseTimeMs INTEGER,
+    userAgent TEXT,
+    ipAddress TEXT,
+    metadata TEXT,
+    screenName TEXT,
+    durationMs INTEGER,
+    connectionType TEXT,
+    memoryMb INTEGER,
+    exceptionHash TEXT,
+    optOut INTEGER NOT NULL DEFAULT 0
+);
+
+selectAll:
+SELECT * FROM TelemetryEntity ORDER BY timestamp DESC;
+
+insertEvent:
+INSERT INTO TelemetryEntity(timestamp, eventType, userId, endpoint, method, statusCode, responseTimeMs, userAgent, ipAddress, metadata, screenName, durationMs, connectionType, memoryMb, exceptionHash, optOut)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+deleteOlderThan:
+DELETE FROM TelemetryEntity WHERE timestamp < ?;
+
+deleteAll:
+DELETE FROM TelemetryEntity;

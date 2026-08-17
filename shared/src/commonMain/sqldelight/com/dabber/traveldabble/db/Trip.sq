@@ -1,0 +1,28 @@
+CREATE TABLE TripEntity (
+    id TEXT PRIMARY KEY NOT NULL,
+    title TEXT NOT NULL,
+    destination TEXT NOT NULL,
+    country TEXT NOT NULL,
+    startDate TEXT NOT NULL,
+    endDate TEXT NOT NULL,
+    daysUntil INTEGER,
+    coverColorsJson TEXT NOT NULL,
+    travelers INTEGER NOT NULL,
+    createdAt INTEGER NOT NULL
+);
+
+selectAll:
+SELECT * FROM TripEntity ORDER BY createdAt DESC;
+
+selectById:
+SELECT * FROM TripEntity WHERE id = ?;
+
+upsert:
+INSERT OR REPLACE INTO TripEntity(id, title, destination, country, startDate, endDate, daysUntil, coverColorsJson, travelers, createdAt)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+deleteById:
+DELETE FROM TripEntity WHERE id = ?;
+
+deleteAll:
+DELETE FROM TripEntity;

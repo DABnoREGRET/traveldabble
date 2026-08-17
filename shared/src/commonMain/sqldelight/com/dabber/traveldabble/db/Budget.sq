@@ -1,0 +1,19 @@
+CREATE TABLE BudgetEntity (
+    id TEXT PRIMARY KEY NOT NULL,
+    tripId TEXT NOT NULL,
+    total REAL NOT NULL,
+    categoriesJson TEXT NOT NULL
+);
+
+selectByTripId:
+SELECT * FROM BudgetEntity WHERE tripId = ?;
+
+upsert:
+INSERT OR REPLACE INTO BudgetEntity(id, tripId, total, categoriesJson)
+VALUES (?, ?, ?, ?);
+
+deleteByTripId:
+DELETE FROM BudgetEntity WHERE tripId = ?;
+
+deleteAll:
+DELETE FROM BudgetEntity;

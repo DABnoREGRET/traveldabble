@@ -1,0 +1,33 @@
+# Render.com Blueprint Infrastructure-as-Code for Travel Dabble
+# Deploy at https://dashboard.render.com/blueprints
+
+services:
+  # Ktor Backend Web Service
+  - type: web
+    name: travel-dabble-server
+    runtime: docker
+    dockerfilePath: server/Dockerfile
+    plan: free
+    region: oregon
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: 8080
+      - key: DATABASE_URL
+        fromDatabase:
+          name: travel-dabble-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: DATABASE_MAX_POOL_SIZE
+        value: 10
+      - key: OPENROUTER_API_KEY
+        sync: false # Optional: Set in Render dashboard or use BYOK in app
+
+databases:
+  # Managed PostgreSQL Database
+  - name: travel-dabble-db
+    plan: free
+    region: oregon
+    databaseName: traveldabble
+    user: traveldabble

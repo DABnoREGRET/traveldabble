@@ -1,0 +1,112 @@
+name: Release APK & AAB
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version_tag:
+        description: 'Release version tag (e.g. v1.0.0)'
+        required: true
+        default: 'v1.0.0'
+      draft:
+        description: 'Create as draft release'
+        required: false
+        type: boolean
+        default: false
+      prerelease:
+        description: 'Create as prerelease'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    name: Build & Release Android App
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Run Test Suites
+        run: |
+          ./gradlew :server:test --stacktrace
+          ./gradlew :shared:testDebugUnitTest --stacktrace
+
+      - name: Configure Keystore from Secrets
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "Decoding release keystore from GitHub secret..."
+            echo "$KEYSTORE_BASE64" | base64 --decode > composeApp/release.jks
+            echo "storeFile=release.jks" > composeApp/keystore.properties
+            echo "storePassword=${KEYSTORE_PASSWORD:-traveldabble2026}" >> composeApp/keystore.properties
+            echo "keyAlias=${KEY_ALIAS:-traveldabble}" >> composeApp/keystore.properties
+            echo "keyPassword=${KEY_PASSWORD:-traveldabble2026}" >> composeApp/keystore.properties
+          else
+            echo "No KEYSTORE_BASE64 secret provided — generating CI release keystore..."
+            keytool -genkeypair -v -keystore composeApp/release.jks \
+              -alias traveldabble -keyalg RSA -keysize 2048 -validity 10000 \
+              -storepass traveldabble2026 -keypass traveldabble2026 \
+              -dname "CN=TravelDabble, OU=Mobile, O=TravelDabble, L=Hanoi, ST=Hanoi, C=VN"
+            echo "storeFile=release.jks" > composeApp/keystore.properties
+            echo "storePassword=traveldabble2026" >> composeApp/keystore.properties
+            echo "keyAlias=traveldabble" >> composeApp/keystore.properties
+            echo "keyPassword=traveldabble2026" >> composeApp/keystore.properties
+          fi
+
+      - name: Build Signed Release APK
+        run: ./gradlew :composeApp:assembleRelease --stacktrace
+
+      - name: Build Signed Release App Bundle (AAB)
+        run: ./gradlew :composeApp:bundleRelease --stacktrace
+
+      - name: Prepare Release Artifacts
+        id: artifacts
+        run: |
+          TAG_NAME="${{ github.ref_name }}"
+          if [ -z "$TAG_NAME" ] || [[ "$TAG_NAME" != v* ]]; then
+            TAG_NAME="${{ inputs.version_tag }}"
+          fi
+          echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
+
+          mkdir -p release-output
+          cp composeApp/build/outputs/apk/release/composeApp-release.apk release-output/TravelDabble-${TAG_NAME}.apk
+          if [ -f composeApp/build/outputs/bundle/release/composeApp-release.aab ]; then
+            cp composeApp/build/outputs/bundle/release/composeApp-release.aab release-output/TravelDabble-${TAG_NAME}.aab
+          fi
+
+      - name: Create GitHub Release & Upload Assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.artifacts.outputs.tag_name }}
+          name: Travel Dabble ${{ steps.artifacts.outputs.tag_name }}
+          draft: ${{ inputs.draft || false }}
+          prerelease: ${{ inputs.prerelease || false }}
+          generate_release_notes: true
+          files: |
+            release-output/*.apk
+            release-output/*.aab
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

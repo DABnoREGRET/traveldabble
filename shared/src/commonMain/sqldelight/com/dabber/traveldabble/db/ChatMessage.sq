@@ -1,0 +1,24 @@
+CREATE TABLE ChatMessageEntity (
+    id TEXT PRIMARY KEY NOT NULL,
+    tripId TEXT NOT NULL,
+    senderId TEXT NOT NULL,
+    senderName TEXT NOT NULL,
+    text TEXT NOT NULL,
+    timestamp INTEGER NOT NULL
+);
+
+selectByTripId:
+SELECT * FROM ChatMessageEntity WHERE tripId = ? ORDER BY timestamp ASC;
+
+upsert:
+INSERT OR REPLACE INTO ChatMessageEntity(id, tripId, senderId, senderName, text, timestamp)
+VALUES (?, ?, ?, ?, ?, ?);
+
+deleteByTripId:
+DELETE FROM ChatMessageEntity WHERE tripId = ?;
+
+deleteById:
+DELETE FROM ChatMessageEntity WHERE id = ?;
+
+deleteAll:
+DELETE FROM ChatMessageEntity;

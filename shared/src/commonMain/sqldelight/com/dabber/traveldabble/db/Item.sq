@@ -1,0 +1,21 @@
+CREATE TABLE ItemEntity (
+    id TEXT PRIMARY KEY NOT NULL,
+    name TEXT NOT NULL,
+    createdAt INTEGER NOT NULL
+);
+
+selectAll:
+SELECT * FROM ItemEntity ORDER BY createdAt DESC;
+
+selectById:
+SELECT * FROM ItemEntity WHERE id = ?;
+
+upsert:
+INSERT OR REPLACE INTO ItemEntity(id, name, createdAt)
+VALUES (?, ?, ?);
+
+deleteById:
+DELETE FROM ItemEntity WHERE id = ?;
+
+deleteAll:
+DELETE FROM ItemEntity;

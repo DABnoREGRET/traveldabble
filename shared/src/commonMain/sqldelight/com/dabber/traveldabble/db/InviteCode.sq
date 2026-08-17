@@ -1,0 +1,26 @@
+CREATE TABLE InviteCodeEntity (
+    id TEXT PRIMARY KEY NOT NULL,
+    code TEXT NOT NULL,
+    tripId TEXT NOT NULL,
+    createdBy TEXT NOT NULL,
+    createdAt INTEGER NOT NULL,
+    expiresAt INTEGER,
+    maxUses INTEGER,
+    useCount INTEGER NOT NULL
+);
+
+selectByTripId:
+SELECT * FROM InviteCodeEntity WHERE tripId = ?;
+
+selectByCode:
+SELECT * FROM InviteCodeEntity WHERE code = ?;
+
+upsert:
+INSERT OR REPLACE INTO InviteCodeEntity(id, code, tripId, createdBy, createdAt, expiresAt, maxUses, useCount)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+
+deleteById:
+DELETE FROM InviteCodeEntity WHERE id = ?;
+
+deleteAll:
+DELETE FROM InviteCodeEntity;

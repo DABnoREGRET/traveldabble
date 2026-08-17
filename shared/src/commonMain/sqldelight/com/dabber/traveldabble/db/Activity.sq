@@ -1,0 +1,24 @@
+CREATE TABLE ActivityEntity (
+    id TEXT PRIMARY KEY NOT NULL,
+    dayPlanId TEXT NOT NULL,
+    placeId TEXT NOT NULL,
+    startTime TEXT NOT NULL,
+    endTime TEXT NOT NULL,
+    note TEXT
+);
+
+selectByDayPlanId:
+SELECT * FROM ActivityEntity WHERE dayPlanId = ? ORDER BY startTime ASC;
+
+upsert:
+INSERT OR REPLACE INTO ActivityEntity(id, dayPlanId, placeId, startTime, endTime, note)
+VALUES (?, ?, ?, ?, ?, ?);
+
+deleteByDayPlanId:
+DELETE FROM ActivityEntity WHERE dayPlanId = ?;
+
+deleteById:
+DELETE FROM ActivityEntity WHERE id = ?;
+
+deleteAll:
+DELETE FROM ActivityEntity;

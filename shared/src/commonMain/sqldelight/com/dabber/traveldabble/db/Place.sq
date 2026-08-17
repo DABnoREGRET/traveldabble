@@ -1,0 +1,26 @@
+CREATE TABLE PlaceEntity (
+    id TEXT PRIMARY KEY NOT NULL,
+    name TEXT NOT NULL,
+    category TEXT NOT NULL,
+    lat REAL NOT NULL,
+    lng REAL NOT NULL,
+    rating REAL NOT NULL,
+    description TEXT NOT NULL,
+    openHours TEXT NOT NULL
+);
+
+selectAll:
+SELECT * FROM PlaceEntity ORDER BY name ASC;
+
+selectById:
+SELECT * FROM PlaceEntity WHERE id = ?;
+
+upsert:
+INSERT OR REPLACE INTO PlaceEntity(id, name, category, lat, lng, rating, description, openHours)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+
+deleteById:
+DELETE FROM PlaceEntity WHERE id = ?;
+
+deleteAll:
+DELETE FROM PlaceEntity;

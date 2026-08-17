@@ -1,0 +1,24 @@
+CREATE TABLE ExpenseEntity (
+    id TEXT PRIMARY KEY NOT NULL,
+    budgetId TEXT NOT NULL,
+    title TEXT NOT NULL,
+    category TEXT NOT NULL,
+    amount REAL NOT NULL,
+    date TEXT NOT NULL
+);
+
+selectByBudgetId:
+SELECT * FROM ExpenseEntity WHERE budgetId = ? ORDER BY date DESC;
+
+upsert:
+INSERT OR REPLACE INTO ExpenseEntity(id, budgetId, title, category, amount, date)
+VALUES (?, ?, ?, ?, ?, ?);
+
+deleteByBudgetId:
+DELETE FROM ExpenseEntity WHERE budgetId = ?;
+
+deleteById:
+DELETE FROM ExpenseEntity WHERE id = ?;
+
+deleteAll:
+DELETE FROM ExpenseEntity;

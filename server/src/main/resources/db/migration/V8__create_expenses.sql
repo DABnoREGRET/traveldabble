@@ -1,0 +1,8 @@
+CREATE TABLE IF NOT EXISTS expenses (
+    id UUID PRIMARY KEY,
+    budget_id UUID NOT NULL REFERENCES budgets(id) ON DELETE CASCADE,
+    title VARCHAR(200) NOT NULL,
+    category VARCHAR(100) NOT NULL,
+    amount DOUBLE PRECISION NOT NULL,
+    date VARCHAR(50) NOT NULL
+);
