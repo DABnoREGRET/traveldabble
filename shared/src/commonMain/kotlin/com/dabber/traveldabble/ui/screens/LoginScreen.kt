@@ -82,14 +82,24 @@ fun LoginScreen(
         var isValid = true
 
         val emailRegex = "^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$".toRegex()
-        if (email.trim().isEmpty()) {
-            emailError = "Email address is required"
-            isValid = false
-        } else if (!email.trim().matches(emailRegex)) {
-            emailError = "Enter a valid email address (e.g. name@example.com)"
-            isValid = false
+        if (isRegister) {
+            if (email.trim().isEmpty()) {
+                emailError = "Email address is required"
+                isValid = false
+            } else if (!email.trim().matches(emailRegex)) {
+                emailError = "Enter a valid email address (e.g. name@example.com)"
+                isValid = false
+            } else {
+                emailError = null
+            }
         } else {
-            emailError = null
+            // Sign in allows either email or username
+            if (email.trim().isEmpty()) {
+                emailError = "Email or username is required"
+                isValid = false
+            } else {
+                emailError = null
+            }
         }
 
         if (password.isEmpty()) {
@@ -135,10 +145,20 @@ fun LoginScreen(
                 AuthState.onLoginSuccess(response)
                 onSuccess()
             } catch (e: ResponseException) {
-                generalError = runCatching { e.response.body<ApiError>().error }
-                    .getOrDefault(e.message ?: "Authentication failed")
+                val serverMsg = runCatching { e.response.body<ApiError>().error }.getOrNull()
+                generalError = serverMsg ?: when (e.response.status.value) {
+                    401 -> "Invalid email/username or password."
+                    409 -> "An account with this email or username already exists."
+                    400 -> "Please check the entered information."
+                    else -> e.message ?: "Authentication failed."
+                }
             } catch (e: Exception) {
-                generalError = e.message ?: "Could not connect to server. You can continue using local mode."
+                val msg = e.message.orEmpty()
+                generalError = when {
+                    msg.contains("Failed to connect", ignoreCase = true) || msg.contains("ConnectException", ignoreCase = true) || msg.contains("SocketTimeout", ignoreCase = true) || msg.contains("UnknownHost", ignoreCase = true) ->
+                        "Cannot reach cloud server. Check your connection or continue in local mode."
+                    else -> e.message ?: "Authentication failed. You can continue using local mode."
+                }
             } finally {
                 loading = false
             }
@@ -237,8 +257,8 @@ fun LoginScreen(
                 email = it
                 if (emailError != null) emailError = null
             },
-            label = "Email address *",
-            placeholder = "you@example.com",
+            label = if (isRegister) "Email address *" else "Email or Username *",
+            placeholder = if (isRegister) "you@example.com" else "you@example.com or username",
             icon = Icons.Filled.Email,
             errorMessage = emailError,
         )

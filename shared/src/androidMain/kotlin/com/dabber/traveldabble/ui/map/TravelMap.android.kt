@@ -193,7 +193,6 @@ private class MapFeatureHolder(val mapView: MapView) {
                     PlaceCategory.FOOD -> "pin_food"
                     PlaceCategory.ACTIVITY -> "pin_activity"
                     PlaceCategory.TRANSIT -> "pin_transit"
-                    else -> "pin_default"
                 }
 
                 sm.create(

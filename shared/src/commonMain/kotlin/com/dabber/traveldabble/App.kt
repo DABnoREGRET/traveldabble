@@ -69,6 +69,7 @@ fun App() {
                 GlassBottomBar(
                     currentRoute = currentRoute,
                     onTabSelected = { route ->
+                        if (currentRoute == route) return@GlassBottomBar
                         navController.navigate(route) {
                             popUpTo(navController.graph.findStartDestination().id) {
                                 saveState = true
@@ -96,28 +97,48 @@ private fun TravelNavHost(navController: NavHostController) {
         startDestination = startDestination,
         modifier = Modifier.fillMaxSize(),
         enterTransition = {
-            slideInHorizontally(
-                initialOffsetX = { (it * 0.15f).toInt() },
-                animationSpec = tween(durationMillis = 280, easing = FastOutSlowInEasing),
-            ) + fadeIn(animationSpec = tween(durationMillis = 280))
+            val isTabSwitch = isBottomTabRoute(initialState.destination.route) && isBottomTabRoute(targetState.destination.route)
+            if (isTabSwitch) {
+                fadeIn(animationSpec = tween(durationMillis = 180))
+            } else {
+                slideInHorizontally(
+                    initialOffsetX = { (it * 0.15f).toInt() },
+                    animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing),
+                ) + fadeIn(animationSpec = tween(durationMillis = 260))
+            }
         },
         exitTransition = {
-            slideOutHorizontally(
-                targetOffsetX = { -(it * 0.10f).toInt() },
-                animationSpec = tween(durationMillis = 240, easing = FastOutSlowInEasing),
-            ) + fadeOut(animationSpec = tween(durationMillis = 220))
+            val isTabSwitch = isBottomTabRoute(initialState.destination.route) && isBottomTabRoute(targetState.destination.route)
+            if (isTabSwitch) {
+                fadeOut(animationSpec = tween(durationMillis = 140))
+            } else {
+                slideOutHorizontally(
+                    targetOffsetX = { -(it * 0.10f).toInt() },
+                    animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
+                ) + fadeOut(animationSpec = tween(durationMillis = 200))
+            }
         },
         popEnterTransition = {
-            slideInHorizontally(
-                initialOffsetX = { -(it * 0.10f).toInt() },
-                animationSpec = tween(durationMillis = 280, easing = FastOutSlowInEasing),
-            ) + fadeIn(animationSpec = tween(durationMillis = 280))
+            val isTabSwitch = isBottomTabRoute(initialState.destination.route) && isBottomTabRoute(targetState.destination.route)
+            if (isTabSwitch) {
+                fadeIn(animationSpec = tween(durationMillis = 180))
+            } else {
+                slideInHorizontally(
+                    initialOffsetX = { -(it * 0.10f).toInt() },
+                    animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing),
+                ) + fadeIn(animationSpec = tween(durationMillis = 260))
+            }
         },
         popExitTransition = {
-            slideOutHorizontally(
-                targetOffsetX = { it },
-                animationSpec = tween(durationMillis = 280, easing = FastOutSlowInEasing),
-            ) + fadeOut(animationSpec = tween(durationMillis = 220))
+            val isTabSwitch = isBottomTabRoute(initialState.destination.route) && isBottomTabRoute(targetState.destination.route)
+            if (isTabSwitch) {
+                fadeOut(animationSpec = tween(durationMillis = 140))
+            } else {
+                slideOutHorizontally(
+                    targetOffsetX = { it },
+                    animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing),
+                ) + fadeOut(animationSpec = tween(durationMillis = 200))
+            }
         },
     ) {
         composable(Routes.Onboarding) {
@@ -247,7 +268,11 @@ private fun TravelNavHost(navController: NavHostController) {
         }
         composable(Routes.TripMap) { entry ->
             val tripId = entry.stringArg("tripId").orEmpty()
-            MapScreen(tripId = tripId, onPlaceClick = { navController.navigate(Routes.placeDetail(it)) })
+            MapScreen(
+                tripId = tripId,
+                onPlaceClick = { navController.navigate(Routes.placeDetail(it)) },
+                onBack = { navController.popBackStack() },
+            )
         }
         composable(Routes.PlaceDetail) { entry ->
             val placeId = entry.stringArg("placeId").orEmpty()

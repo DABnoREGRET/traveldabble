@@ -44,9 +44,11 @@ fun Route.AuthRoutes() {
                 return@post
             }
             try {
+                val cleanUsername = request.username.trim()
+                val cleanEmail = request.email.trim().lowercase()
                 val exists = transaction {
                     Users.selectAll().where {
-                        (Users.username eq request.username) or (Users.email eq request.email)
+                        (Users.username.lowerCase() eq cleanUsername.lowercase()) or (Users.email.lowerCase() eq cleanEmail)
                     }.any()
                 }
                 if (exists) {
@@ -59,8 +61,8 @@ fun Route.AuthRoutes() {
                     val hash = PasswordService.hash(request.password)
                     Users.insert {
                         it[Users.id] = id
-                        it[Users.username] = request.username.trim()
-                        it[Users.email] = request.email.trim()
+                        it[Users.username] = cleanUsername
+                        it[Users.email] = cleanEmail
                         it[Users.passwordHash] = hash
                         it[Users.displayName] = request.displayName.trim()
                         it[Users.createdAt] = System.currentTimeMillis()
@@ -69,7 +71,7 @@ fun Route.AuthRoutes() {
                         token = JwtService.createToken(id.toString()),
                         userId = id.toString(),
                         displayName = request.displayName.trim(),
-                        email = request.email.trim(),
+                        email = cleanEmail,
                     )
                 }
                 call.respond(HttpStatusCode.Created, response)
@@ -91,8 +93,11 @@ fun Route.AuthRoutes() {
                 call.respond(HttpStatusCode.BadRequest, ApiError(errors.joinToString("; ")))
                 return@post
             }
+            val identifier = request.email.trim().lowercase()
             val user = transaction {
-                Users.selectAll().where { Users.email eq request.email.trim() }.singleOrNull()
+                Users.selectAll().where {
+                    (Users.email.lowerCase() eq identifier) or (Users.username.lowerCase() eq identifier)
+                }.singleOrNull()
             }
             if (user == null) {
                 call.respond(HttpStatusCode.Unauthorized, ApiError("Invalid email or password"))

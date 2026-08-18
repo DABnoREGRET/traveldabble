@@ -74,7 +74,7 @@ object Validation {
 
     fun validateLogin(req: LoginRequest): List<String> {
         val errors = mutableListOf<String>()
-        email(req.email)?.let { errors += it }
+        if (req.email.trim().isBlank()) errors += "email or username is required"
         if (req.password.isBlank()) errors += "password is required"
         return errors
     }
