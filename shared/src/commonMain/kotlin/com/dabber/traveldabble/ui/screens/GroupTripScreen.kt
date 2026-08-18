@@ -21,13 +21,17 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -41,6 +45,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -53,6 +59,7 @@ import com.dabber.traveldabble.ui.components.GlassIconButton
 import com.dabber.traveldabble.ui.glass.GlassIntensity
 import com.dabber.traveldabble.ui.glass.glass
 import com.dabber.traveldabble.ui.theme.Danger
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @Composable
@@ -66,11 +73,43 @@ fun GroupTripScreen(
     var isLoading by remember { mutableStateOf(true) }
     var showJoinDialog by remember { mutableStateOf(false) }
     var joinInput by remember { mutableStateOf("") }
+    var copiedFeedback by remember { mutableStateOf(false) }
+    var memberToRemove by remember { mutableStateOf<TripMember?>(null) }
+    val clipboardManager = LocalClipboardManager.current
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(tripId) {
         members = Repository.getTripMembers(tripId)
         isLoading = false
+    }
+
+    if (memberToRemove != null) {
+        val member = memberToRemove!!
+        AlertDialog(
+            onDismissRequest = { memberToRemove = null },
+            title = { Text("Remove Member?") },
+            text = {
+                Text("Are you sure you want to remove ${member.displayName} from this trip?")
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        scope.launch {
+                            Repository.removeMember(tripId, member.userId)
+                            members = Repository.getTripMembers(tripId)
+                            memberToRemove = null
+                        }
+                    }
+                ) {
+                    Text("Remove")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { memberToRemove = null }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 
     Column(
@@ -92,7 +131,7 @@ fun GroupTripScreen(
             )
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    "Trip Members",
+                    "Trip Members & Collaboration",
                     style = MaterialTheme.typography.titleLarge,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
@@ -122,7 +161,7 @@ fun GroupTripScreen(
                 },
             )
             GlassChip(
-                label = "Join Another Trip",
+                label = "Join with Code",
                 selected = false,
                 onClick = { showJoinDialog = true },
             )
@@ -142,27 +181,42 @@ fun GroupTripScreen(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            "Invite Code",
+                            "Invite Code (Share with travel companions)",
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.primary,
                         )
                         Text(
                             code,
-                            style = MaterialTheme.typography.titleLarge,
+                            style = MaterialTheme.typography.headlineSmall,
                             color = MaterialTheme.colorScheme.onSurface,
                             fontWeight = FontWeight.Bold,
                         )
                     }
-                    Icon(
-                        Icons.Filled.ContentCopy,
-                        contentDescription = "Copy code",
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier
-                            .size(24.dp)
-                            .clickable {
-                                // Code copied
-                            },
-                    )
+                    if (copiedFeedback) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            Icon(Icons.Filled.Check, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+                            Text("Copied!", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                        }
+                    } else {
+                        Icon(
+                            Icons.Filled.ContentCopy,
+                            contentDescription = "Copy code",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier
+                                .size(24.dp)
+                                .clickable {
+                                    clipboardManager.setText(AnnotatedString(code))
+                                    copiedFeedback = true
+                                    scope.launch {
+                                        delay(2000)
+                                        copiedFeedback = false
+                                    }
+                                },
+                        )
+                    }
                 }
             }
         }
@@ -202,10 +256,7 @@ fun GroupTripScreen(
                         member = member,
                         isOwner = member.role == "owner",
                         onRemove = {
-                            scope.launch {
-                                Repository.removeMember(tripId, member.userId)
-                                members = Repository.getTripMembers(tripId)
-                            }
+                            memberToRemove = member
                         },
                     )
                 }
@@ -311,98 +362,61 @@ private fun JoinTripDialog(
     onJoin: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    var error by remember { mutableStateOf<String?>(null) }
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.6f))
-            .clickable { onDismiss() },
-        contentAlignment = Alignment.Center,
-    ) {
-        GlassCard(
-            modifier = Modifier
-                .padding(24.dp)
-                .clickable { /* consume click */ },
-            intensity = GlassIntensity.Prominent,
-            contentPadding = 20.dp,
-        ) {
-            Column(
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                Text(
-                    "Join Trip",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text("Join Group Trip")
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
                     "Enter the 6-character invite code shared by the trip organizer:",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-
-                // Code input
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .glass(RoundedCornerShape(12.dp), GlassIntensity.Subtle)
-                            .padding(horizontal = 16.dp, vertical = 14.dp),
-                    ) {
-                        if (code.isEmpty()) {
-                            Text(
-                                "e.g. VN8821",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                            )
-                        }
-                        BasicTextField(
-                            value = code,
-                            onValueChange = {
-                                onCodeChange(it)
-                                if (error != null) error = null
-                            },
-                            textStyle = TextStyle(
-                                color = MaterialTheme.colorScheme.onSurface,
-                                fontSize = MaterialTheme.typography.titleMedium.fontSize,
-                                fontWeight = FontWeight.SemiBold,
-                            ),
-                            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                    }
-                    if (error != null) {
-                        Text(
-                            error!!,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Danger,
-                        )
-                    }
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .glass(shape = RoundedCornerShape(12.dp), intensity = GlassIntensity.Subtle)
+                        .padding(14.dp),
                 ) {
-                    GlassButton(
-                        label = "Cancel",
-                        onClick = onDismiss,
-                        modifier = Modifier.weight(1f),
-                    )
-                    GlassButton(
-                        label = "Join Trip",
-                        onClick = {
-                            if (code.trim().length < 3) {
-                                error = "Please enter a valid invite code"
-                            } else {
-                                onJoin()
+                    BasicTextField(
+                        value = code,
+                        onValueChange = onCodeChange,
+                        modifier = Modifier.fillMaxWidth(),
+                        textStyle = TextStyle(
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontSize = MaterialTheme.typography.titleMedium.fontSize,
+                            fontWeight = FontWeight.Bold,
+                        ),
+                        singleLine = true,
+                        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                        decorationBox = { innerTextField ->
+                            if (code.isEmpty()) {
+                                Text(
+                                    "e.g. VN4921",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                                )
                             }
+                            innerTextField()
                         },
-                        accent = true,
-                        modifier = Modifier.weight(1f),
                     )
                 }
             }
-        }
-    }
+        },
+        confirmButton = {
+            Button(
+                onClick = onJoin,
+                enabled = code.trim().length >= 3,
+            ) {
+                Text("Join Trip")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        },
+    )
 }

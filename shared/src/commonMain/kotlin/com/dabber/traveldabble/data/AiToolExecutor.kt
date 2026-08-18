@@ -286,7 +286,10 @@ object AiToolExecutor {
             ?: return ToolResult.Error("screen is required")
         val tripId = args.get("trip_id")?.jsonPrimitive?.contentOrNull
 
-        val validScreens = setOf("home", "trips", "map", "explore", "profile", "ai_chat", "trip_detail", "create_trip")
+        val validScreens = setOf(
+            "home", "trips", "map", "explore", "profile", "ai_chat", "trip_detail",
+            "create_trip", "itinerary", "budget", "group_trip", "ai_settings", "account"
+        )
         if (screen !in validScreens) {
             return ToolResult.Error("Unknown screen: $screen. Valid screens: ${validScreens.joinToString()}")
         }
@@ -339,27 +342,34 @@ object AiToolExecutor {
         val query = args?.get("query")?.jsonPrimitive?.contentOrNull ?: ""
         val country = args?.get("country")?.jsonPrimitive?.contentOrNull
 
-        // Call server's MCP search endpoint
-        return try {
-            val results = ApiClient.searchDestinations(query, country)
-            ToolResult.Success(
-                data = buildJsonObject {
-                    put("results", JsonArray(results.map { dest ->
-                        buildJsonObject {
-                            put("id", dest.id)
-                            put("name", dest.name)
-                            put("country", dest.country)
-                            put("tagline", dest.tagline)
-                            put("rating", dest.rating)
-                        }
-                    }))
-                    put("count", JsonPrimitive(results.size))
-                },
-                message = "Found ${results.size} destination(s) matching '$query'",
-            )
-        } catch (e: Exception) {
-            ToolResult.Error("Search failed: ${e.message}")
+        val results = try {
+            ApiClient.searchDestinations(query, country)
+        } catch (_: Exception) {
+            // Local fallback
+            val allDest = Repository.getDestinations()
+            val q = query.trim().lowercase()
+            allDest.filter { d ->
+                val matchesQuery = q.isEmpty() || d.name.lowercase().contains(q) || d.tagline.lowercase().contains(q) || d.tags.any { it.lowercase().contains(q) }
+                val matchesCountry = country.isNullOrBlank() || d.country.equals(country, ignoreCase = true)
+                matchesQuery && matchesCountry
+            }
         }
+
+        return ToolResult.Success(
+            data = buildJsonObject {
+                put("results", JsonArray(results.map { dest ->
+                    buildJsonObject {
+                        put("id", dest.id)
+                        put("name", dest.name)
+                        put("country", dest.country)
+                        put("tagline", dest.tagline)
+                        put("rating", dest.rating)
+                    }
+                }))
+                put("count", JsonPrimitive(results.size))
+            },
+            message = "Found ${results.size} destination(s) matching '$query'",
+        )
     }
 }
 

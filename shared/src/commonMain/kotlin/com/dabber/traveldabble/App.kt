@@ -228,6 +228,12 @@ private fun TravelNavHost(navController: NavHostController) {
                         "itinerary" -> {
                             tripId?.let { navController.navigate(Routes.itinerary(it)) }
                         }
+                        "budget" -> {
+                            tripId?.let { navController.navigate(Routes.budget(it)) }
+                        }
+                        "group_trip" -> {
+                            tripId?.let { navController.navigate(Routes.groupTrip(it)) }
+                        }
                         "create_trip" -> navController.navigate(Routes.CreateTrip)
                     }
                 },

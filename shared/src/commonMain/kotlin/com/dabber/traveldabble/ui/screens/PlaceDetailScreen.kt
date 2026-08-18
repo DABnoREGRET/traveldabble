@@ -1,5 +1,6 @@
 package com.dabber.traveldabble.ui.screens
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,21 +20,23 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Map
-import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -43,12 +46,14 @@ import androidx.compose.ui.unit.dp
 import com.dabber.traveldabble.data.Repository
 import com.dabber.traveldabble.model.Destination
 import com.dabber.traveldabble.model.Place
+import com.dabber.traveldabble.model.Trip
 import com.dabber.traveldabble.ui.components.CategoryBadge
 import com.dabber.traveldabble.ui.components.GlassButton
 import com.dabber.traveldabble.ui.components.GlassCard
 import com.dabber.traveldabble.ui.components.GlassChip
 import com.dabber.traveldabble.ui.components.GlassIconButton
 import com.dabber.traveldabble.ui.components.GradientCover
+import com.dabber.traveldabble.ui.glass.GlassIntensity
 import com.dabber.traveldabble.ui.mock.MockData
 import com.dabber.traveldabble.ui.mock.icon
 import com.dabber.traveldabble.ui.mock.tint
@@ -56,6 +61,7 @@ import com.dabber.traveldabble.ui.mock.toDomain
 import com.dabber.traveldabble.ui.theme.AuroraGold
 import com.dabber.traveldabble.ui.theme.AuroraTeal
 import com.dabber.traveldabble.ui.theme.CoverOcean
+import kotlinx.coroutines.launch
 
 @Composable
 fun PlaceDetailScreen(
@@ -70,8 +76,15 @@ fun PlaceDetailScreen(
     var relatedPlaces by remember { mutableStateOf<List<Place>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
 
+    var userTrips by remember { mutableStateOf<List<Trip>>(emptyList()) }
+    var showAddToTripDialog by remember { mutableStateOf(false) }
+    var selectedTargetPlace by remember { mutableStateOf<Place?>(null) }
+    var addedSuccessMessage by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+
     LaunchedEffect(placeId) {
         loading = true
+        userTrips = Repository.getTrips()
 
         // 1. Try finding as a Place
         val foundPlace = Repository.getPlace(placeId)
@@ -87,7 +100,6 @@ fun PlaceDetailScreen(
 
         if (foundDest != null) {
             destination = foundDest
-            // Find places located in this destination area
             val destName = foundDest.name.lowercase()
             val allMockPlaces = MockData.hanoiPlaces + MockData.centralPlaces + MockData.haGiangPlaces + MockData.saigonPlaces + MockData.ninhBinhPlaces
             relatedPlaces = when {
@@ -105,6 +117,35 @@ fun PlaceDetailScreen(
         loading = false
     }
 
+    // Add to Itinerary Dialog
+    if (showAddToTripDialog && selectedTargetPlace != null) {
+        val targetPlace = selectedTargetPlace!!
+        AddToTripModal(
+            place = targetPlace,
+            trips = userTrips,
+            onDismiss = { showAddToTripDialog = false },
+            onCreateNewTrip = {
+                showAddToTripDialog = false
+                onNavigateToPlanTrip?.invoke(targetPlace.name)
+            },
+            onAddToTrip = { tripId, dayNumber ->
+                scope.launch {
+                    Repository.addActivityToTrip(
+                        tripId = tripId,
+                        dayNumber = dayNumber,
+                        place = targetPlace,
+                        startTime = "09:00",
+                        endTime = "11:00",
+                        note = "Added from Place Details",
+                    )
+                    val tripTitle = userTrips.firstOrNull { it.id == tripId }?.title ?: "Trip"
+                    addedSuccessMessage = "Added ${targetPlace.name} to $tripTitle (Day $dayNumber)!"
+                    showAddToTripDialog = false
+                }
+            },
+        )
+    }
+
     if (loading) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
@@ -116,25 +157,39 @@ fun PlaceDetailScreen(
     val currentDest = destination
 
     if (currentPlace != null) {
-        // Render Place Details
         PlaceDetailContent(
             place = currentPlace,
+            addedSuccessMessage = addedSuccessMessage,
             onBack = onBack,
             onNavigateToMap = onNavigateToMap,
-            onPlanTrip = onNavigateToPlanTrip,
+            onAddToItinerary = {
+                selectedTargetPlace = currentPlace
+                if (userTrips.isEmpty()) {
+                    onNavigateToPlanTrip?.invoke(currentPlace.name)
+                } else {
+                    showAddToTripDialog = true
+                }
+            },
         )
     } else if (currentDest != null) {
-        // Render Destination Details
         DestinationDetailContent(
             destination = currentDest,
             relatedPlaces = relatedPlaces,
+            addedSuccessMessage = addedSuccessMessage,
             onBack = onBack,
             onPlaceClick = onPlaceClick,
             onNavigateToMap = onNavigateToMap,
             onPlanTrip = onNavigateToPlanTrip,
+            onAddPlaceToItinerary = { targetPl ->
+                selectedTargetPlace = targetPl
+                if (userTrips.isEmpty()) {
+                    onNavigateToPlanTrip?.invoke(targetPl.name)
+                } else {
+                    showAddToTripDialog = true
+                }
+            },
         )
     } else {
-        // Not found fallback
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -160,9 +215,10 @@ fun PlaceDetailScreen(
 @Composable
 private fun PlaceDetailContent(
     place: Place,
+    addedSuccessMessage: String?,
     onBack: () -> Unit,
     onNavigateToMap: ((lat: Double, lng: Double, placeId: String?) -> Unit)? = null,
-    onPlanTrip: ((String) -> Unit)? = null,
+    onAddToItinerary: () -> Unit,
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -206,6 +262,26 @@ private fun PlaceDetailContent(
                 }
             }
         }
+
+        // Success snack banner
+        addedSuccessMessage?.let { msg ->
+            item {
+                GlassCard(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
+                    intensity = GlassIntensity.Standard,
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Icon(Icons.Filled.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Text(msg, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
+                    }
+                }
+            }
+        }
+
         item {
             Column(
                 modifier = Modifier.padding(20.dp),
@@ -243,13 +319,14 @@ private fun PlaceDetailContent(
                         label = "View on Map",
                         icon = Icons.Filled.Map,
                         onClick = { onNavigateToMap?.invoke(place.lat, place.lng, place.id) },
-                        accent = true,
+                        accent = false,
                         modifier = Modifier.weight(1f),
                     )
                     GlassButton(
-                        label = "Plan Trip",
+                        label = "+ Add to Trip",
                         icon = Icons.Filled.Add,
-                        onClick = { onPlanTrip?.invoke(place.name) },
+                        onClick = onAddToItinerary,
+                        accent = true,
                         modifier = Modifier.weight(1f),
                     )
                 }
@@ -262,10 +339,12 @@ private fun PlaceDetailContent(
 private fun DestinationDetailContent(
     destination: Destination,
     relatedPlaces: List<Place>,
+    addedSuccessMessage: String?,
     onBack: () -> Unit,
     onPlaceClick: ((String) -> Unit)? = null,
     onNavigateToMap: ((lat: Double, lng: Double, placeId: String?) -> Unit)? = null,
     onPlanTrip: ((String) -> Unit)? = null,
+    onAddPlaceToItinerary: ((Place) -> Unit)? = null,
 ) {
     val coverColors = if (destination.cover.isNotEmpty()) destination.cover.map { Color(it) } else CoverOcean
 
@@ -315,6 +394,25 @@ private fun DestinationDetailContent(
                         style = MaterialTheme.typography.bodyMedium,
                         color = Color.White.copy(alpha = 0.9f),
                     )
+                }
+            }
+        }
+
+        // Success message banner
+        addedSuccessMessage?.let { msg ->
+            item {
+                GlassCard(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+                    intensity = GlassIntensity.Standard,
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Icon(Icons.Filled.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Text(msg, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
+                    }
                 }
             }
         }
@@ -434,4 +532,97 @@ private fun DestinationDetailContent(
             }
         }
     }
+}
+
+@Composable
+private fun AddToTripModal(
+    place: Place,
+    trips: List<Trip>,
+    onDismiss: () -> Unit,
+    onCreateNewTrip: () -> Unit,
+    onAddToTrip: (tripId: String, dayNumber: Int) -> Unit,
+) {
+    var selectedTrip by remember { mutableStateOf<Trip?>(trips.firstOrNull()) }
+    var selectedDayNumber by remember { mutableStateOf(1) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text("Add to Itinerary")
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(
+                    "Add \"${place.name}\" (${place.category.label}) to your planned route:",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+
+                Text("Select Trip:", style = MaterialTheme.typography.labelLarge)
+                trips.forEach { t ->
+                    val isSelected = selectedTrip?.id == t.id
+                    GlassCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        intensity = if (isSelected) GlassIntensity.Prominent else GlassIntensity.Subtle,
+                        onClick = {
+                            selectedTrip = t
+                            selectedDayNumber = 1
+                        },
+                        contentPadding = 10.dp,
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(t.title, style = MaterialTheme.typography.titleSmall)
+                            Text("${t.days.size.coerceAtLeast(1)} days", style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
+                }
+
+                selectedTrip?.let { st ->
+                    Text("Select Day:", style = MaterialTheme.typography.labelLarge)
+                    val daysCount = st.days.size.coerceAtLeast(3)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        (1..daysCount).forEach { dayNum ->
+                            GlassChip(
+                                label = "Day $dayNum",
+                                selected = selectedDayNumber == dayNum,
+                                onClick = { selectedDayNumber = dayNum },
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    selectedTrip?.let {
+                        onAddToTrip(it.id, selectedDayNumber)
+                    }
+                },
+                enabled = selectedTrip != null,
+            ) {
+                Text("Add Activity")
+            }
+        },
+        dismissButton = {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = onCreateNewTrip) {
+                    Text("New Trip")
+                }
+                TextButton(onClick = onDismiss) {
+                    Text("Cancel")
+                }
+            }
+        },
+    )
 }
