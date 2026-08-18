@@ -60,7 +60,7 @@ data class UserPreferences(
     val themeMode: ThemeMode = ThemeMode.System,
 
     // Demo Mode: when true, provides sample trips & destinations; when false, starts clean
-    val demoMode: Boolean = true,
+    val demoMode: Boolean = false,
 
     // Notifications
     val tripReminders: Boolean = true,

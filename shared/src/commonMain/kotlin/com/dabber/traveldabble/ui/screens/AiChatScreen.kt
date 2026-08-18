@@ -9,9 +9,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -363,11 +366,16 @@ fun AiChatScreen(
             }
         }
 
+        // Dock clearance calculation: 88.dp when keyboard is closed, 10.dp when keyboard is up
+        val imeBottom = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
+        val isKeyboardOpen = imeBottom > 0.dp
+        val bottomDockPadding = if (isKeyboardOpen) 10.dp else 88.dp
+
         // Input Bar
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = 16.dp, end = 16.dp, bottom = 12.dp, top = 6.dp),
+                .padding(start = 16.dp, end = 16.dp, top = 6.dp, bottom = bottomDockPadding),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {

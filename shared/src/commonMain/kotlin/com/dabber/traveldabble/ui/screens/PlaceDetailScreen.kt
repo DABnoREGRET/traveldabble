@@ -17,6 +17,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.FavoriteBorder
@@ -60,6 +61,8 @@ import com.dabber.traveldabble.ui.theme.CoverOcean
 fun PlaceDetailScreen(
     placeId: String,
     onBack: () -> Unit,
+    onPlaceClick: ((String) -> Unit)? = null,
+    onNavigateToMap: (() -> Unit)? = null,
     onNavigateToPlanTrip: ((String) -> Unit)? = null,
 ) {
     var place by remember { mutableStateOf<Place?>(null) }
@@ -93,7 +96,7 @@ fun PlaceDetailScreen(
                 destName.contains("ha giang") -> MockData.haGiangPlaces
                 destName.contains("ho chi minh") || destName.contains("saigon") -> MockData.saigonPlaces
                 destName.contains("ninh binh") -> MockData.ninhBinhPlaces
-                else -> allMockPlaces.take(5)
+                else -> allMockPlaces.take(6)
             }
             loading = false
             return@LaunchedEffect
@@ -114,13 +117,20 @@ fun PlaceDetailScreen(
 
     if (currentPlace != null) {
         // Render Place Details
-        PlaceDetailContent(place = currentPlace, onBack = onBack)
+        PlaceDetailContent(
+            place = currentPlace,
+            onBack = onBack,
+            onNavigateToMap = onNavigateToMap,
+            onPlanTrip = onNavigateToPlanTrip,
+        )
     } else if (currentDest != null) {
         // Render Destination Details
         DestinationDetailContent(
             destination = currentDest,
             relatedPlaces = relatedPlaces,
             onBack = onBack,
+            onPlaceClick = onPlaceClick,
+            onNavigateToMap = onNavigateToMap,
             onPlanTrip = onNavigateToPlanTrip,
         )
     } else {
@@ -165,10 +175,15 @@ fun PlaceDetailScreen(
 }
 
 @Composable
-private fun PlaceDetailContent(place: Place, onBack: () -> Unit) {
+private fun PlaceDetailContent(
+    place: Place,
+    onBack: () -> Unit,
+    onNavigateToMap: (() -> Unit)? = null,
+    onPlanTrip: ((String) -> Unit)? = null,
+) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(bottom = 40.dp),
+        contentPadding = PaddingValues(bottom = 60.dp),
     ) {
         item {
             Box {
@@ -237,10 +252,23 @@ private fun PlaceDetailContent(place: Place, onBack: () -> Unit) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     lineHeight = MaterialTheme.typography.bodyLarge.lineHeight,
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    GlassButton(label = "Add to trip", icon = Icons.Filled.Add, onClick = {}, accent = true)
-                    GlassButton(label = "Bookmark", icon = Icons.Filled.FavoriteBorder, onClick = {})
-                    GlassButton(label = "AI Tips", icon = Icons.Filled.AutoAwesome, onClick = {})
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    GlassButton(
+                        label = "View on Map",
+                        icon = Icons.Filled.Map,
+                        onClick = { onNavigateToMap?.invoke() },
+                        accent = true,
+                        modifier = Modifier.weight(1f),
+                    )
+                    GlassButton(
+                        label = "Plan Trip",
+                        icon = Icons.Filled.Add,
+                        onClick = { onPlanTrip?.invoke(place.name) },
+                        modifier = Modifier.weight(1f),
+                    )
                 }
             }
         }
@@ -252,6 +280,8 @@ private fun DestinationDetailContent(
     destination: Destination,
     relatedPlaces: List<Place>,
     onBack: () -> Unit,
+    onPlaceClick: ((String) -> Unit)? = null,
+    onNavigateToMap: (() -> Unit)? = null,
     onPlanTrip: ((String) -> Unit)? = null,
 ) {
     val coverColors = if (destination.cover.isNotEmpty()) destination.cover.map { Color(it) } else CoverOcean
@@ -327,12 +357,17 @@ private fun DestinationDetailContent(
             item {
                 Column(
                     modifier = Modifier.padding(horizontal = 20.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     Text(
                         "Top Sights & Experiences",
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
                         color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(
+                        "Tap any place to view details & map location",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
@@ -342,6 +377,9 @@ private fun DestinationDetailContent(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 20.dp),
+                    onClick = {
+                        onPlaceClick?.invoke(itemPlace.id)
+                    },
                     contentPadding = 12.dp,
                 ) {
                     Row(
@@ -363,10 +401,21 @@ private fun DestinationDetailContent(
                                 maxLines = 2,
                             )
                         }
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Filled.Star, null, tint = AuroraGold, modifier = Modifier.size(13.dp))
-                            Spacer(Modifier.width(2.dp))
-                            Text("${itemPlace.rating}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurface)
+                        Column(
+                            horizontalAlignment = Alignment.End,
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Filled.Star, null, tint = AuroraGold, modifier = Modifier.size(13.dp))
+                                Spacer(Modifier.width(2.dp))
+                                Text("${itemPlace.rating}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurface)
+                            }
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowForward,
+                                contentDescription = "View",
+                                tint = AuroraTeal,
+                                modifier = Modifier.size(16.dp),
+                            )
                         }
                     }
                 }
@@ -375,18 +424,24 @@ private fun DestinationDetailContent(
 
         // Action Buttons
         item {
-            Column(
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 20.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 GlassButton(
-                    label = "Plan a trip to ${destination.name}",
+                    label = "Explore on Map",
+                    icon = Icons.Filled.Map,
+                    onClick = { onNavigateToMap?.invoke() },
+                    modifier = Modifier.weight(1f),
+                )
+                GlassButton(
+                    label = "Plan Trip",
                     icon = Icons.Filled.Add,
                     onClick = { onPlanTrip?.invoke(destination.name) },
                     accent = true,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.weight(1f),
                 )
             }
         }

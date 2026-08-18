@@ -254,6 +254,12 @@ private fun TravelNavHost(navController: NavHostController) {
             PlaceDetailScreen(
                 placeId = placeId,
                 onBack = { navController.popBackStack() },
+                onPlaceClick = { targetPlaceId ->
+                    navController.navigate(Routes.placeDetail(targetPlaceId))
+                },
+                onNavigateToMap = {
+                    navController.navigate(Routes.Map)
+                },
                 onNavigateToPlanTrip = { _ ->
                     navController.navigate(Routes.CreateTrip)
                 },
