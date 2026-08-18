@@ -73,7 +73,7 @@ fun App() {
                         ScrollState.show()
                         navController.navigate(route) {
                             popUpTo(navController.graph.findStartDestination().id) {
-                                saveState = false
+                                saveState = true
                             }
                             launchSingleTop = true
                             restoreState = true
@@ -210,48 +210,63 @@ private fun TravelNavHost(navController: NavHostController) {
                             ScrollState.show()
                             navController.navigate(Routes.Home) {
                                 popUpTo(navController.graph.findStartDestination().id) {
-                                    inclusive = false
+                                    saveState = true
                                 }
                                 launchSingleTop = true
+                                restoreState = true
                             }
                         }
                         "trips" -> {
                             ScrollState.show()
                             navController.navigate(Routes.Trips) {
-                                popUpTo(Routes.Home)
+                                popUpTo(navController.graph.findStartDestination().id) {
+                                    saveState = true
+                                }
+                                launchSingleTop = true
+                                restoreState = true
                             }
                         }
                         "map" -> {
                             ScrollState.show()
                             navController.navigate(Routes.Map) {
-                                popUpTo(Routes.Home)
+                                popUpTo(navController.graph.findStartDestination().id) {
+                                    saveState = true
+                                }
+                                launchSingleTop = true
+                                restoreState = true
                             }
                         }
                         "explore" -> {
                             ScrollState.show()
-                            navController.navigate(Routes.Explore) {
-                                popUpTo(Routes.Home)
-                            }
+                            navController.navigate(Routes.Explore)
                         }
                         "profile" -> {
                             ScrollState.show()
                             navController.navigate(Routes.Profile) {
-                                popUpTo(Routes.Home)
+                                popUpTo(navController.graph.findStartDestination().id) {
+                                    saveState = true
+                                }
+                                launchSingleTop = true
+                                restoreState = true
                             }
                         }
                         "ai_settings" -> navController.navigate(Routes.SettingsAccount)
                         "account" -> navController.navigate(Routes.SettingsAccount)
                         "trip_detail" -> {
-                            tripId?.let { navController.navigate(Routes.tripDetail(it)) }
+                            val targetTripId = tripId ?: "demo_hanoi_01"
+                            navController.navigate(Routes.tripDetail(targetTripId))
                         }
                         "itinerary" -> {
-                            tripId?.let { navController.navigate(Routes.itinerary(it)) }
+                            val targetTripId = tripId ?: "demo_hanoi_01"
+                            navController.navigate(Routes.itinerary(targetTripId))
                         }
                         "budget" -> {
-                            tripId?.let { navController.navigate(Routes.budget(it)) }
+                            val targetTripId = tripId ?: "demo_hanoi_01"
+                            navController.navigate(Routes.budget(targetTripId))
                         }
                         "group_trip" -> {
-                            tripId?.let { navController.navigate(Routes.groupTrip(it)) }
+                            val targetTripId = tripId ?: "demo_hanoi_01"
+                            navController.navigate(Routes.groupTrip(targetTripId))
                         }
                         "create_trip" -> navController.navigate(Routes.CreateTrip)
                     }

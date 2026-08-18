@@ -182,13 +182,6 @@ fun AiChatScreen(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            // Back to Home Button
-            GlassIconButton(
-                icon = androidx.compose.material.icons.Icons.AutoMirrored.Filled.ArrowBack,
-                contentDescription = "Back to Home",
-                onClick = { onNavigate("home", null) },
-            )
-
             // Conversation Drawer Toggle Button
             Box(
                 modifier = Modifier
