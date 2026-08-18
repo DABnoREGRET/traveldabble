@@ -12,6 +12,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -30,12 +31,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.dabber.traveldabble.ui.components.bounceClick
-import com.dabber.traveldabble.ui.glass.GlassIntensity
-import com.dabber.traveldabble.ui.glass.glass
+import com.dabber.traveldabble.ui.theme.SpaceDeep
+import com.dabber.traveldabble.ui.theme.SpaceNight
 
 @Composable
 fun GlassBottomBar(
@@ -44,6 +46,11 @@ fun GlassBottomBar(
     modifier: Modifier = Modifier,
     visible: Boolean = true,
 ) {
+    val isDark = MaterialTheme.colorScheme.background == SpaceNight || MaterialTheme.colorScheme.surface == SpaceDeep
+    val dockBgColor = if (isDark) Color(0xF40F172A) else Color(0xF8FFFFFF)
+    val dockBorderColor = if (isDark) Color(0x33FFFFFF) else Color(0x220F172A)
+    val dockShape = RoundedCornerShape(32.dp)
+
     AnimatedVisibility(
         visible = visible,
         enter = fadeIn(animationSpec = tween(220)) +
@@ -62,7 +69,10 @@ fun GlassBottomBar(
             modifier = Modifier
                 .padding(horizontal = 20.dp, vertical = 6.dp)
                 .fillMaxWidth()
-                .glass(RoundedCornerShape(32.dp), GlassIntensity.Prominent)
+                .shadow(16.dp, dockShape)
+                .clip(dockShape)
+                .background(dockBgColor)
+                .border(1.dp, dockBorderColor, dockShape)
                 .padding(horizontal = 6.dp, vertical = 6.dp),
             horizontalArrangement = Arrangement.SpaceAround,
             verticalAlignment = Alignment.CenterVertically,
@@ -81,13 +91,13 @@ fun GlassBottomBar(
 
                 val contentColor by animateColorAsState(
                     targetValue = if (selected) MaterialTheme.colorScheme.primary
-                                  else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
+                                  else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
                     animationSpec = tween(durationMillis = 200),
                     label = "tabColor",
                 )
 
                 val pillBackground by animateColorAsState(
-                    targetValue = if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
+                    targetValue = if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
                                   else Color.Transparent,
                     animationSpec = tween(durationMillis = 200),
                     label = "tabPillBg",

@@ -218,15 +218,9 @@ fun ProfileScreen(
                     onClick = onNavigateToMap,
                 )
                 SettingsRow(
-                    icon = Icons.Filled.AutoAwesome,
-                    title = "AI Assistant",
-                    subtitle = if (SettingsState.openRouterApiKey != null) "Using custom API key" else "Local / Server AI",
-                    onClick = onNavigateToAccount,
-                )
-                SettingsRow(
                     icon = Icons.Filled.Person,
-                    title = "Account",
-                    subtitle = if (isGuest) "Local mode" else (user?.displayName ?: "Signed in"),
+                    title = "Account & AI Settings",
+                    subtitle = if (isGuest) "Local-first storage • Server & BYOK AI" else (user?.displayName ?: "Signed in"),
                     onClick = onNavigateToAccount,
                 )
                 SettingsRow(

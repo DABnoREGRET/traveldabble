@@ -281,6 +281,7 @@ fun OnboardingScreen(
                     GlassButton(
                         label = "Get Started",
                         onClick = {
+                            onRequestLocationPermission()
                             SettingsState.completeOnboarding()
                             onFinish()
                         },
@@ -294,6 +295,7 @@ fun OnboardingScreen(
                         color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier
                             .clickable {
+                                onRequestLocationPermission()
                                 SettingsState.completeOnboarding()
                                 onLogin()
                             }

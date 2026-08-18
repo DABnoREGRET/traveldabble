@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -134,20 +135,30 @@ fun BudgetScreen(tripId: String, onBack: () -> Unit) {
                         )
                     }
                 }
-                Spacer(Modifier.height(14.dp))
+                val totalCatAmount = budget.categories.sumOf { it.second }.toFloat().coerceAtLeast(1f)
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(10.dp)
                         .clip(RoundedCornerShape(50)),
                 ) {
-                    budget.categories.forEachIndexed { index, (_, amount) ->
+                    if (budget.categories.isEmpty()) {
                         Box(
                             Modifier
-                                .weight(amount.toFloat().coerceAtLeast(1f))
-                                .fillMaxSize()
-                                .background(categoryColors[index % categoryColors.size]),
+                                .fillMaxWidth()
+                                .fillMaxHeight()
+                                .background(MaterialTheme.colorScheme.surfaceVariant)
                         )
+                    } else {
+                        budget.categories.forEachIndexed { index, (_, amount) ->
+                            val weight = (amount.toFloat() / totalCatAmount).coerceAtLeast(0.01f)
+                            Box(
+                                Modifier
+                                    .weight(weight)
+                                    .fillMaxHeight()
+                                    .background(categoryColors[index % categoryColors.size]),
+                            )
+                        }
                     }
                 }
             }

@@ -368,7 +368,10 @@ fun MapScreen(
                 icon = Icons.Filled.MyLocation,
                 contentDescription = "My Location",
                 selected = autoCenter,
-                onClick = { autoCenter = true },
+                onClick = {
+                    autoCenter = true
+                    com.dabber.traveldabble.requestLocationPermissionFromContext()
+                },
             )
         }
 

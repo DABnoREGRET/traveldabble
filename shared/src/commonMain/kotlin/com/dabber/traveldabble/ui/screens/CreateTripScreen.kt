@@ -12,15 +12,24 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -33,6 +42,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
+import com.dabber.traveldabble.data.ApiClient
 import com.dabber.traveldabble.data.Repository
 import com.dabber.traveldabble.ui.components.GlassButton
 import com.dabber.traveldabble.ui.components.GlassChip
@@ -41,7 +51,33 @@ import com.dabber.traveldabble.ui.glass.GlassIntensity
 import com.dabber.traveldabble.ui.glass.glass
 import com.dabber.traveldabble.ui.theme.Danger
 import kotlinx.coroutines.launch
+import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 
+private fun formatDateFromMillis(millis: Long): String {
+    val instant = Instant.fromEpochMilliseconds(millis)
+    val localDate = instant.toLocalDateTime(TimeZone.UTC).date
+    val monthName = when (localDate.monthNumber) {
+        1 -> "Jan"
+        2 -> "Feb"
+        3 -> "Mar"
+        4 -> "Apr"
+        5 -> "May"
+        6 -> "Jun"
+        7 -> "Jul"
+        8 -> "Aug"
+        9 -> "Sep"
+        10 -> "Oct"
+        11 -> "Nov"
+        12 -> "Dec"
+        else -> ""
+    }
+    return "$monthName ${localDate.dayOfMonth}, ${localDate.year}"
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CreateTripScreen(onBack: () -> Unit, onCreated: () -> Unit) {
     var title by remember { mutableStateOf("") }
@@ -50,6 +86,9 @@ fun CreateTripScreen(onBack: () -> Unit, onCreated: () -> Unit) {
     var startDate by remember { mutableStateOf("") }
     var endDate by remember { mutableStateOf("") }
     var travelers by remember { mutableStateOf("2") }
+
+    var showStartDatePicker by remember { mutableStateOf(false) }
+    var showEndDatePicker by remember { mutableStateOf(false) }
 
     var titleError by remember { mutableStateOf<String?>(null) }
     var destinationError by remember { mutableStateOf<String?>(null) }
@@ -96,14 +135,14 @@ fun CreateTripScreen(onBack: () -> Unit, onCreated: () -> Unit) {
         }
 
         if (startDate.trim().isEmpty()) {
-            startDateError = "Start date is required (e.g. Oct 15)"
+            startDateError = "Please select a start date"
             isValid = false
         } else {
             startDateError = null
         }
 
         if (endDate.trim().isEmpty()) {
-            endDateError = "End date is required (e.g. Oct 22)"
+            endDateError = "Please select an end date"
             isValid = false
         } else {
             endDateError = null
@@ -138,8 +177,68 @@ fun CreateTripScreen(onBack: () -> Unit, onCreated: () -> Unit) {
             if (created != null) {
                 onCreated()
             } else {
-                generalError = "Could not create trip. Please check your inputs and try again."
+                generalError = "Could not create trip. Please check your network or server connection."
             }
+        }
+    }
+
+    // Material 3 Date Picker Dialog for Start Date
+    if (showStartDatePicker) {
+        val datePickerState = rememberDatePickerState(
+            initialSelectedDateMillis = Clock.System.now().toEpochMilliseconds()
+        )
+        DatePickerDialog(
+            onDismissRequest = { showStartDatePicker = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        datePickerState.selectedDateMillis?.let {
+                            startDate = formatDateFromMillis(it)
+                            startDateError = null
+                        }
+                        showStartDatePicker = false
+                    }
+                ) {
+                    Text("Done")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showStartDatePicker = false }) {
+                    Text("Cancel")
+                }
+            }
+        ) {
+            DatePicker(state = datePickerState)
+        }
+    }
+
+    // Material 3 Date Picker Dialog for End Date
+    if (showEndDatePicker) {
+        val datePickerState = rememberDatePickerState(
+            initialSelectedDateMillis = Clock.System.now().toEpochMilliseconds() + (7L * 24 * 60 * 60 * 1000)
+        )
+        DatePickerDialog(
+            onDismissRequest = { showEndDatePicker = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        datePickerState.selectedDateMillis?.let {
+                            endDate = formatDateFromMillis(it)
+                            endDateError = null
+                        }
+                        showEndDatePicker = false
+                    }
+                ) {
+                    Text("Done")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showEndDatePicker = false }) {
+                    Text("Cancel")
+                }
+            }
+        ) {
+            DatePicker(state = datePickerState)
         }
     }
 
@@ -168,7 +267,9 @@ fun CreateTripScreen(onBack: () -> Unit, onCreated: () -> Unit) {
 
         item {
             Column(
-                modifier = Modifier.padding(horizontal = 20.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 // Quick suggestions
@@ -235,28 +336,26 @@ fun CreateTripScreen(onBack: () -> Unit, onCreated: () -> Unit) {
                     errorMessage = countryError,
                 )
 
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    GlassTextField(
+                // Date Selection with Material Date Picker
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    DateSelectorField(
                         value = startDate,
-                        onValueChange = {
-                            startDate = it
-                            if (startDateError != null) startDateError = null
-                        },
                         label = "Start date *",
-                        placeholder = "Oct 15",
+                        placeholder = "Select date",
                         errorMessage = startDateError,
                         modifier = Modifier.weight(1f),
+                        onClick = { showStartDatePicker = true },
                     )
-                    GlassTextField(
+                    DateSelectorField(
                         value = endDate,
-                        onValueChange = {
-                            endDate = it
-                            if (endDateError != null) endDateError = null
-                        },
                         label = "End date *",
-                        placeholder = "Oct 22",
+                        placeholder = "Select date",
                         errorMessage = endDateError,
                         modifier = Modifier.weight(1f),
+                        onClick = { showEndDatePicker = true },
                     )
                 }
 
@@ -282,7 +381,10 @@ fun CreateTripScreen(onBack: () -> Unit, onCreated: () -> Unit) {
 
                 Spacer(Modifier.height(8.dp))
 
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
                     GlassButton(
                         label = if (submitting) "Creating…" else "Create trip",
                         onClick = ::submit,
@@ -296,6 +398,62 @@ fun CreateTripScreen(onBack: () -> Unit, onCreated: () -> Unit) {
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun DateSelectorField(
+    value: String,
+    label: String,
+    placeholder: String,
+    modifier: Modifier = Modifier,
+    errorMessage: String? = null,
+    onClick: () -> Unit,
+) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelLarge,
+            color = if (errorMessage != null) Danger else MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .glass(
+                    shape = RoundedCornerShape(16.dp),
+                    intensity = GlassIntensity.Standard,
+                    tint = if (errorMessage != null) Danger.copy(alpha = 0.08f) else Color.Transparent,
+                )
+                .clickable(onClick = onClick)
+                .padding(horizontal = 14.dp, vertical = 13.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text(
+                    text = value.ifEmpty { placeholder },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (value.isEmpty()) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                            else MaterialTheme.colorScheme.onSurface,
+                )
+                Icon(
+                    Icons.Filled.CalendarMonth,
+                    contentDescription = "Pick Date",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+        }
+        if (errorMessage != null) {
+            Text(
+                errorMessage,
+                style = MaterialTheme.typography.bodySmall,
+                color = Danger,
+                modifier = Modifier.padding(start = 4.dp),
+            )
         }
     }
 }
