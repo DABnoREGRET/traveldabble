@@ -14,42 +14,65 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import com.dabber.traveldabble.data.Repository
+import com.dabber.traveldabble.ui.components.GlassButton
 import com.dabber.traveldabble.ui.components.GlassCard
+import com.dabber.traveldabble.ui.components.GlassChip
 import com.dabber.traveldabble.ui.components.GlassIconButton
 import com.dabber.traveldabble.ui.components.ProgressTrack
 import com.dabber.traveldabble.ui.glass.GlassIntensity
+import com.dabber.traveldabble.model.Expense
 import com.dabber.traveldabble.ui.mock.Trip
 import com.dabber.traveldabble.ui.mock.toUi
+import com.dabber.traveldabble.ui.theme.AuroraTeal
+import com.dabber.traveldabble.ui.theme.Danger
 import com.dabber.traveldabble.ui.theme.JadeGreen
 import com.dabber.traveldabble.ui.theme.LotusRed
 import com.dabber.traveldabble.ui.theme.MekongOrange
 import com.dabber.traveldabble.ui.theme.SilkViolet
 import com.dabber.traveldabble.ui.theme.TempleGold
+import kotlinx.coroutines.launch
 
 private val categoryColors = listOf(JadeGreen, MekongOrange, TempleGold, SilkViolet, LotusRed)
 
 @Composable
 fun BudgetScreen(tripId: String, onBack: () -> Unit) {
     var trip by remember { mutableStateOf<Trip?>(null) }
+    var showAddExpenseDialog by remember { mutableStateOf(false) }
+    var showEditBudgetDialog by remember { mutableStateOf(false) }
+    var expenseTitle by remember { mutableStateOf("") }
+    var expenseAmount by remember { mutableStateOf("") }
+    var expenseCategory by remember { mutableStateOf("Food") }
+    var budgetTargetInput by remember { mutableStateOf("") }
+    var expenseToDelete by remember { mutableStateOf<Expense?>(null) }
+    val scope = rememberCoroutineScope()
 
     LaunchedEffect(tripId) {
         trip = Repository.getTrip(tripId)?.toUi()
@@ -69,6 +92,166 @@ fun BudgetScreen(tripId: String, onBack: () -> Unit) {
     }
 
     val budget = loadedTrip.budget
+
+    if (showEditBudgetDialog) {
+        AlertDialog(
+            onDismissRequest = { showEditBudgetDialog = false },
+            title = { Text("Set Total Budget Target") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        "Set your total spending budget for ${loadedTrip.title}.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    OutlinedTextField(
+                        value = budgetTargetInput,
+                        onValueChange = { budgetTargetInput = it },
+                        label = { Text("Total Budget (USD)") },
+                        placeholder = { Text("1500.0") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val newTarget = budgetTargetInput.toDoubleOrNull() ?: 0.0
+                        if (newTarget > 0.0) {
+                            scope.launch {
+                                Repository.updateTripBudget(tripId, newTarget)
+                                trip = Repository.getTrip(tripId)?.toUi()
+                            }
+                            showEditBudgetDialog = false
+                        }
+                    }
+                ) {
+                    Text("Save")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showEditBudgetDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    if (expenseToDelete != null) {
+        val exp = expenseToDelete!!
+        AlertDialog(
+            onDismissRequest = { expenseToDelete = null },
+            title = { Text("Delete Expense?") },
+            text = {
+                Text(
+                    "Remove '${exp.title}' (${exp.amount.toInt()} USD) from your trip budget?",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        scope.launch {
+                            Repository.removeExpenseFromTrip(tripId, exp.id)
+                            trip = Repository.getTrip(tripId)?.toUi()
+                            expenseToDelete = null
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Danger),
+                ) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { expenseToDelete = null }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    if (showAddExpenseDialog) {
+        val categories = listOf("Food", "Lodging", "Transport", "Activities", "Other")
+        AlertDialog(
+            onDismissRequest = { showAddExpenseDialog = false },
+            title = { Text("Log Expense") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedTextField(
+                        value = expenseTitle,
+                        onValueChange = { expenseTitle = it },
+                        label = { Text("Description") },
+                        placeholder = { Text("e.g. Pho dinner in Old Quarter") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    OutlinedTextField(
+                        value = expenseAmount,
+                        onValueChange = { expenseAmount = it },
+                        label = { Text("Amount (USD)") },
+                        placeholder = { Text("25.0") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Text("Category", style = MaterialTheme.typography.labelMedium)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        categories.take(3).forEach { cat ->
+                            GlassChip(
+                                label = cat,
+                                selected = expenseCategory == cat,
+                                onClick = { expenseCategory = cat },
+                            )
+                        }
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        categories.drop(3).forEach { cat ->
+                            GlassChip(
+                                label = cat,
+                                selected = expenseCategory == cat,
+                                onClick = { expenseCategory = cat },
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val amount = expenseAmount.toDoubleOrNull() ?: 0.0
+                        if (expenseTitle.isNotBlank() && amount > 0.0) {
+                            scope.launch {
+                                Repository.addExpenseToTrip(
+                                    tripId = tripId,
+                                    title = expenseTitle.trim(),
+                                    category = expenseCategory,
+                                    amount = amount,
+                                )
+                                trip = Repository.getTrip(tripId)?.toUi()
+                            }
+                            expenseTitle = ""
+                            expenseAmount = ""
+                            showAddExpenseDialog = false
+                        }
+                    }
+                ) {
+                    Text("Add")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAddExpenseDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
 
     LazyColumn(
         modifier = Modifier
@@ -108,6 +291,7 @@ fun BudgetScreen(tripId: String, onBack: () -> Unit) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Column {
                         Text(
@@ -118,85 +302,124 @@ fun BudgetScreen(tripId: String, onBack: () -> Unit) {
                         Text(
                             "${budget.spent.toInt()} USD",
                             style = MaterialTheme.typography.headlineLarge,
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
-                    }
-                    Column(horizontalAlignment = Alignment.End) {
-                        Text(
-                            "of ${budget.total.toInt()} USD",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        val percentUsed = if (budget.total > 0) ((budget.spent / budget.total) * 100).toInt() else 0
-                        Text(
-                            "$percentUsed% used",
-                            style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.primary,
                         )
                     }
-                }
-                val totalCatAmount = budget.categories.sumOf { it.second }.toFloat().coerceAtLeast(1f)
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(10.dp)
-                        .clip(RoundedCornerShape(50)),
-                ) {
-                    if (budget.categories.isEmpty()) {
-                        Box(
-                            Modifier
-                                .fillMaxWidth()
-                                .fillMaxHeight()
-                                .background(MaterialTheme.colorScheme.surfaceVariant)
-                        )
-                    } else {
-                        budget.categories.forEachIndexed { index, (_, amount) ->
-                            val weight = (amount.toFloat() / totalCatAmount).coerceAtLeast(0.01f)
-                            Box(
-                                Modifier
-                                    .weight(weight)
-                                    .fillMaxHeight()
-                                    .background(categoryColors[index % categoryColors.size]),
+                    Column(horizontalAlignment = Alignment.End) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            Text(
+                                "Total Budget",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
+                            GlassIconButton(
+                                icon = Icons.Filled.Edit,
+                                contentDescription = "Edit Budget Target",
+                                onClick = {
+                                    budgetTargetInput = budget.total.toInt().toString()
+                                    showEditBudgetDialog = true
+                                },
+                                modifier = Modifier.size(24.dp),
+                            )
+                        }
+                        Text(
+                            "${budget.total.toInt()} USD",
+                            style = MaterialTheme.typography.headlineLarge,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                    }
+                }
+                Spacer(Modifier.height(14.dp))
+                val fraction = if (budget.total > 0) (budget.spent / budget.total).toFloat().coerceIn(0f, 1f) else 0f
+                ProgressTrack(fraction = fraction, color = AuroraTeal)
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "${((fraction) * 100).toInt()}% of budget used",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        item {
+            Text(
+                "Spending by Category",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.padding(horizontal = 20.dp),
+            )
+        }
+        if (budget.categories.isNotEmpty()) {
+            val totalCat = budget.categories.sumOf { it.second }
+            item {
+                GlassCard(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+                    contentPadding = 16.dp,
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(12.dp)
+                                .clip(RoundedCornerShape(6.dp)),
+                        ) {
+                            budget.categories.forEachIndexed { index, (_, amount) ->
+                                val weight = if (totalCat > 0) (amount / totalCat).toFloat().coerceAtLeast(0.01f) else 1f
+                                Box(
+                                    modifier = Modifier
+                                        .weight(weight)
+                                        .fillMaxHeight()
+                                        .background(categoryColors[index % categoryColors.size]),
+                                )
+                            }
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            budget.categories.forEachIndexed { index, (cat, amount) ->
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(8.dp)
+                                            .background(categoryColors[index % categoryColors.size], RoundedCornerShape(2.dp)),
+                                    )
+                                    Text(
+                                        "$cat: ${amount.toInt()}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
                         }
                     }
                 }
             }
-        }
-        item {
-            Column(
-                modifier = Modifier.padding(horizontal = 20.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                Text(
-                    "By Category",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                budget.categories.forEachIndexed { index, (label, amount) ->
-                    GlassCard(intensity = GlassIntensity.Subtle, contentPadding = 14.dp) {
+            items(budget.categories.size) { index ->
+                val (cat, amount) = budget.categories[index]
+                GlassCard(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+                    intensity = GlassIntensity.Subtle,
+                    contentPadding = 14.dp,
+                ) {
+                    Column {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Box(
-                                    Modifier
-                                        .size(10.dp)
-                                        .clip(RoundedCornerShape(50))
-                                        .background(categoryColors[index % categoryColors.size]),
-                                )
-                                Spacer(Modifier.width(10.dp))
-                                Text(
-                                    label,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                )
-                            }
+                            Text(
+                                cat,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
                             Text(
                                 "${amount.toInt()} USD",
-                                style = MaterialTheme.typography.labelLarge,
+                                style = MaterialTheme.typography.titleSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
@@ -209,15 +432,26 @@ fun BudgetScreen(tripId: String, onBack: () -> Unit) {
                 }
             }
         }
-        if (budget.expenses.isNotEmpty()) {
-            item {
+        item {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 Text(
                     "Logged Expenses",
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.padding(horizontal = 20.dp),
+                )
+                GlassButton(
+                    label = "+ Add",
+                    onClick = { showAddExpenseDialog = true },
                 )
             }
+        }
+        if (budget.expenses.isNotEmpty()) {
             items(budget.expenses) { expense ->
                 GlassCard(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
@@ -229,7 +463,10 @@ fun BudgetScreen(tripId: String, onBack: () -> Unit) {
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(2.dp),
+                        ) {
                             Text(
                                 expense.title,
                                 style = MaterialTheme.typography.bodyMedium,
@@ -241,11 +478,27 @@ fun BudgetScreen(tripId: String, onBack: () -> Unit) {
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
-                        Text(
-                            "${expense.amount.toInt()} USD",
-                            style = MaterialTheme.typography.titleSmall,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Text(
+                                "${expense.amount.toInt()} USD",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                            IconButton(
+                                onClick = { expenseToDelete = expense },
+                                modifier = Modifier.size(24.dp),
+                            ) {
+                                Icon(
+                                    Icons.Filled.Delete,
+                                    contentDescription = "Delete Expense",
+                                    tint = Danger.copy(alpha = 0.8f),
+                                    modifier = Modifier.size(16.dp),
+                                )
+                            }
+                        }
                     }
                 }
             }

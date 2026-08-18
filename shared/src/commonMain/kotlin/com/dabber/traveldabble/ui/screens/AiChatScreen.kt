@@ -464,6 +464,10 @@ fun AiChatScreen(
                                                         is ToolResult.Success -> r.navigateTo
                                                         else -> null
                                                     },
+                                                    navigateTripId = when (val r = event.result) {
+                                                        is ToolResult.Success -> r.navigateTripId
+                                                        else -> null
+                                                    },
                                                 )
                                                 toolEvents.add(display)
                                             }
@@ -670,6 +674,7 @@ data class ToolEventDisplay(
     val message: String,
     val timestamp: Long,
     val navigationTarget: String? = null,
+    val navigateTripId: String? = null,
 )
 
 enum class ToolStatus { RUNNING, SUCCESS, ERROR }
@@ -725,7 +730,7 @@ private fun ToolEventCard(
                     modifier = Modifier
                         .clip(RoundedCornerShape(8.dp))
                         .glass(RoundedCornerShape(8.dp), GlassIntensity.Standard)
-                        .clickable { onNavigate(target, null) }
+                        .clickable { onNavigate(target, event.navigateTripId) }
                         .padding(horizontal = 8.dp, vertical = 4.dp),
                 ) {
                     Row(

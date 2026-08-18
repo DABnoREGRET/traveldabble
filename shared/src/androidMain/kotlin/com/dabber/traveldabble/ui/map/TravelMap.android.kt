@@ -176,6 +176,7 @@ private class MapFeatureHolder(val mapView: MapView) {
     private var onMarkerClickListener: ((Place) -> Unit)? = null
 
     fun updatePlacesAndRoutes(
+        map: MapLibreMap?,
         places: List<Place>,
         showPolylines: Boolean,
         coroutineScope: CoroutineScope,
@@ -213,40 +214,53 @@ private class MapFeatureHolder(val mapView: MapView) {
                 lm.deleteAll()
                 clm.deleteAll()
 
-                if (showPolylines && places.size >= 2) {
-                    val waypoints = places.map { it.lat to it.lng }
-                    coroutineScope.launch {
-                        // Resolve actual turn-by-turn road geometry
-                        val roadwayCoords = withContext(Dispatchers.Default) {
-                            RouteManager.getRoadwayCoordinates(waypoints, profile = "driving")
+                if (showPolylines && places.isNotEmpty()) {
+                    val userLocation = try {
+                        if (map?.locationComponent?.isLocationComponentActivated == true) {
+                            map.locationComponent.lastKnownLocation?.let { it.latitude to it.longitude }
+                        } else null
+                    } catch (_: Throwable) { null }
+
+                    val waypoints = when {
+                        userLocation != null -> listOf(userLocation) + places.map { it.lat to it.lng }
+                        places.size >= 2 -> places.map { it.lat to it.lng }
+                        else -> emptyList()
+                    }
+
+                    if (waypoints.size >= 2) {
+                        coroutineScope.launch {
+                            // Resolve actual turn-by-turn road geometry
+                            val roadwayCoords = withContext(Dispatchers.Default) {
+                                RouteManager.getRoadwayCoordinates(waypoints, profile = "driving")
+                            }
+                            val mapPoints = roadwayCoords.map { LatLng(it.first, it.second) }
+
+                            // Draw Google Maps style road route with outer casing + glowing emerald road fill
+                            try {
+                                clm.deleteAll()
+                                lm.deleteAll()
+
+                                // 1. Darker casing outline
+                                clm.create(
+                                    LineOptions()
+                                        .withLatLngs(mapPoints)
+                                        .withLineColor("#0F172A")
+                                        .withLineWidth(7.0f)
+                                        .withLineOpacity(0.85f)
+                                        .withLineJoin("round")
+                                )
+
+                                // 2. High-contrast emerald navigation road line
+                                lm.create(
+                                    LineOptions()
+                                        .withLatLngs(mapPoints)
+                                        .withLineColor("#10B981")
+                                        .withLineWidth(4.5f)
+                                        .withLineOpacity(0.95f)
+                                        .withLineJoin("round")
+                                )
+                            } catch (_: Throwable) {}
                         }
-                        val mapPoints = roadwayCoords.map { LatLng(it.first, it.second) }
-
-                        // Draw Google Maps style road route with outer casing + glowing emerald road fill
-                        try {
-                            clm.deleteAll()
-                            lm.deleteAll()
-
-                            // 1. Darker casing outline
-                            clm.create(
-                                LineOptions()
-                                    .withLatLngs(mapPoints)
-                                    .withLineColor("#0F172A")
-                                    .withLineWidth(7.0f)
-                                    .withLineOpacity(0.85f)
-                                    .withLineJoin("round")
-                            )
-
-                            // 2. High-contrast emerald navigation road line
-                            lm.create(
-                                LineOptions()
-                                    .withLatLngs(mapPoints)
-                                    .withLineColor("#10B981")
-                                    .withLineWidth(4.5f)
-                                    .withLineOpacity(0.95f)
-                                    .withLineJoin("round")
-                            )
-                        } catch (_: Throwable) {}
                     }
                 }
             } catch (_: Throwable) {}
@@ -264,6 +278,7 @@ actual fun TravelMap(
     showPolylines: Boolean,
     showUserLocation: Boolean,
     autoCenterOnLocation: Boolean,
+    focusLocation: Pair<Double, Double>?,
     onMarkerClick: (Place) -> Unit,
 ) {
     val context = LocalContext.current
@@ -324,9 +339,16 @@ actual fun TravelMap(
                     map.setStyle(style.styleUrl) { loadedStyle ->
                         featureHolder.resetManagers(map, loadedStyle)
 
-                        val firstPlace = places.firstOrNull()
-                        val targetCenter = firstPlace?.let { LatLng(it.lat, it.lng) } ?: VIETNAM_DEFAULT_CENTER
-                        val zoomLevel = if (firstPlace != null) 12.0 else 6.0
+                        val targetCenter = when {
+                            focusLocation != null -> LatLng(focusLocation.first, focusLocation.second)
+                            places.isNotEmpty() -> LatLng(places.first().lat, places.first().lng)
+                            else -> VIETNAM_DEFAULT_CENTER
+                        }
+                        val zoomLevel = when {
+                            focusLocation != null -> 14.5
+                            places.isNotEmpty() -> 12.0
+                            else -> 6.0
+                        }
 
                         map.cameraPosition = CameraPosition.Builder()
                             .target(targetCenter)
@@ -335,7 +357,7 @@ actual fun TravelMap(
                             .bearing(0.0)
                             .build()
 
-                        featureHolder.updatePlacesAndRoutes(places, showPolylines, scope, onMarkerClick)
+                        featureHolder.updatePlacesAndRoutes(map, places, showPolylines, scope, onMarkerClick)
 
                         if (showUserLocation) {
                             try {
@@ -355,6 +377,8 @@ actual fun TravelMap(
                                 locationComponent.isLocationComponentEnabled = true
                                 locationComponent.cameraMode = CameraMode.NONE
                                 locationComponent.renderMode = RenderMode.NORMAL
+                                // Re-run route update with user location now active
+                                featureHolder.updatePlacesAndRoutes(map, places, showPolylines, scope, onMarkerClick)
                             } catch (_: Throwable) {}
                         }
                     }
@@ -371,14 +395,22 @@ actual fun TravelMap(
                     if (currentStyle == null || featureHolder.activeStyleUrl != targetStyleUrl) {
                         map.setStyle(targetStyleUrl) { loadedStyle ->
                             featureHolder.resetManagers(map, loadedStyle)
-                            featureHolder.updatePlacesAndRoutes(places, showPolylines, scope, onMarkerClick)
+                            featureHolder.updatePlacesAndRoutes(map, places, showPolylines, scope, onMarkerClick)
                         }
                     } else {
-                        featureHolder.updatePlacesAndRoutes(places, showPolylines, scope, onMarkerClick)
+                        featureHolder.updatePlacesAndRoutes(map, places, showPolylines, scope, onMarkerClick)
                     }
 
-                    // Camera position updates
-                    if (places.isNotEmpty()) {
+                    // Camera position updates: prioritize focusLocation
+                    if (focusLocation != null) {
+                        map.animateCamera(
+                            CameraUpdateFactory.newLatLngZoom(
+                                LatLng(focusLocation.first, focusLocation.second),
+                                14.5
+                            ),
+                            800
+                        )
+                    } else if (places.isNotEmpty()) {
                         if (places.size == 1) {
                             map.animateCamera(
                                 CameraUpdateFactory.newLatLngZoom(

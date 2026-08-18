@@ -62,6 +62,9 @@ fun AccountSettingsScreen(onBack: () -> Unit) {
     var connectionStatus by remember { mutableStateOf<Boolean?>(null) }
     var isTesting by remember { mutableStateOf(false) }
 
+    // Sign out confirmation dialog state
+    var showSignOutDialog by remember { mutableStateOf(false) }
+
     // AI BYOK & Model selection dialog state
     var showAiDialog by remember { mutableStateOf(false) }
     var aiKeyInput by remember { mutableStateOf(SettingsState.openRouterApiKey ?: "") }
@@ -190,13 +193,45 @@ fun AccountSettingsScreen(onBack: () -> Unit) {
             GlassCard(contentPadding = 14.dp) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     AccountAction(
-                        label = if (AuthState.isGuestMode) "Clear Local Data" else "Sign Out",
+                        label = if (AuthState.isGuestMode) "Clear Local Session" else "Sign Out",
                         description = "Return to guest state or switch user accounts",
-                        onClick = { AuthState.onLogout() },
+                        onClick = { showSignOutDialog = true },
                     )
                 }
             }
         }
+    }
+
+    if (showSignOutDialog) {
+        val isGuest = AuthState.isGuestMode
+        AlertDialog(
+            onDismissRequest = { showSignOutDialog = false },
+            title = { Text(if (isGuest) "Clear Local Session?" else "Sign Out?") },
+            text = {
+                Text(
+                    if (isGuest) "This will reset your current guest session. You will stay in offline local mode."
+                    else "Are you sure you want to sign out from ${user?.email ?: "your account"}? Your local trips remain stored.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        AuthState.onLogout()
+                        showSignOutDialog = false
+                        onBack()
+                    },
+                ) {
+                    Text(if (isGuest) "Clear Session" else "Sign Out")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSignOutDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 
     // Server Connection Dialog — rendered at composable root, not inside Column content lambda

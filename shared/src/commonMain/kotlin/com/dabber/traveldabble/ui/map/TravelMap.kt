@@ -22,5 +22,6 @@ expect fun TravelMap(
     showPolylines: Boolean = true,
     showUserLocation: Boolean = false,
     autoCenterOnLocation: Boolean = false,
+    focusLocation: Pair<Double, Double>? = null,
     onMarkerClick: (Place) -> Unit = {},
 )

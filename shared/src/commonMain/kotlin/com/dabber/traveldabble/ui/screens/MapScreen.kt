@@ -102,6 +102,9 @@ private fun Modifier.mapCardSurface(shape: Shape = RoundedCornerShape(20.dp)): M
 @Composable
 fun MapScreen(
     tripId: String? = null,
+    initialLat: Double? = null,
+    initialLng: Double? = null,
+    focusPlaceId: String? = null,
     onPlaceClick: (String) -> Unit = {},
     onBack: (() -> Unit)? = null,
 ) {
@@ -111,6 +114,12 @@ fun MapScreen(
     var selectedTripId by remember { mutableStateOf(tripId) }
     var showTripSelector by remember { mutableStateOf(false) }
     var showLayerMenu by remember { mutableStateOf(false) }
+
+    var focusLocation by remember(initialLat, initialLng) {
+        mutableStateOf(
+            if (initialLat != null && initialLng != null) initialLat to initialLng else null
+        )
+    }
 
     // Day-by-day route filter: null = all days in trip, 1 = Day 1, 2 = Day 2...
     var selectedDayNumber by remember { mutableStateOf<Int?>(null) }
@@ -132,28 +141,56 @@ fun MapScreen(
     var tilt3d by remember { mutableStateOf(true) }
     var showPolylines by remember { mutableStateOf(true) }
     var showUserLocation by remember { mutableStateOf(true) }
-    var autoCenter by remember { mutableStateOf(true) }
+    var autoCenter by remember { mutableStateOf(initialLat == null && focusPlaceId == null) }
     var selectedPlace by remember { mutableStateOf<Place?>(null) }
 
     LaunchedEffect(tripId) {
         selectedTripId = tripId
         val loadedTrips = Repository.getTrips().map { it.toUi() }
         trips = loadedTrips
-        allPlaces = loadedTrips.flatMap { t ->
+        val tripPlaces = loadedTrips.flatMap { t ->
             t.days.flatMap { it.activities }.map { it.place }
-        }.distinctBy { it.id }
+        }
+        val defaultPlaces = Repository.getPlaces()
+        allPlaces = (tripPlaces + defaultPlaces).distinctBy { it.id }
 
         if (tripId != null) {
-            trip = Repository.getTrip(tripId)?.toUi()
+            val t = Repository.getTrip(tripId)?.toUi()
+            trip = t
+            if (focusLocation == null && t != null) {
+                val firstPlace = t.days.flatMap { it.activities }.map { it.place }.firstOrNull()
+                if (firstPlace != null) {
+                    focusLocation = firstPlace.lat to firstPlace.lng
+                    autoCenter = false
+                }
+            }
+        }
+    }
+
+    LaunchedEffect(focusPlaceId, allPlaces) {
+        if (focusPlaceId != null) {
+            val found = allPlaces.firstOrNull { it.id == focusPlaceId }
+                ?: Repository.getPlace(focusPlaceId)
+            if (found != null) {
+                selectedPlace = found
+                focusLocation = found.lat to found.lng
+                autoCenter = false
+            }
         }
     }
 
     LaunchedEffect(selectedTripId) {
         selectedDayNumber = null
-        trip = if (selectedTripId == null) {
-            null
+        if (selectedTripId == null) {
+            trip = null
         } else {
-            Repository.getTrip(selectedTripId!!)?.toUi()
+            val t = Repository.getTrip(selectedTripId!!)?.toUi()
+            trip = t
+            val firstPlace = t?.days?.flatMap { it.activities }?.map { it.place }?.firstOrNull()
+            if (firstPlace != null) {
+                focusLocation = firstPlace.lat to firstPlace.lng
+                autoCenter = false
+            }
         }
     }
 
@@ -166,17 +203,24 @@ fun MapScreen(
         } else null
     }
 
-    val placesForMap = remember(loadedTrip, selectedDayNumber, selectedCategoryFilter, allPlaces) {
+    val placesForMap = remember(loadedTrip, selectedDayNumber, selectedCategoryFilter, allPlaces, selectedPlace) {
         val basePlaces = when {
             currentDayPlan != null -> currentDayPlan.activities.map { it.place }
             loadedTrip != null -> loadedTrip.days.flatMap { it.activities }.map { it.place }.distinctBy { it.id }
             else -> allPlaces
         }
 
-        if (selectedCategoryFilter != null) {
+        val list = if (selectedCategoryFilter != null) {
             basePlaces.filter { it.category == selectedCategoryFilter }
         } else {
             basePlaces
+        }
+
+        // Ensure focused place is in the marker set so its pin renders
+        if (selectedPlace != null && list.none { it.id == selectedPlace?.id }) {
+            list + selectedPlace!!
+        } else {
+            list
         }
     }
 
@@ -190,8 +234,10 @@ fun MapScreen(
             showPolylines = showPolylines && (loadedTrip != null || currentDayPlan != null),
             showUserLocation = showUserLocation,
             autoCenterOnLocation = autoCenter,
+            focusLocation = focusLocation,
             onMarkerClick = {
                 selectedPlace = it
+                focusLocation = it.lat to it.lng
                 autoCenter = false
             },
         )

@@ -62,7 +62,7 @@ fun PlaceDetailScreen(
     placeId: String,
     onBack: () -> Unit,
     onPlaceClick: ((String) -> Unit)? = null,
-    onNavigateToMap: (() -> Unit)? = null,
+    onNavigateToMap: ((lat: Double, lng: Double, placeId: String?) -> Unit)? = null,
     onNavigateToPlanTrip: ((String) -> Unit)? = null,
 ) {
     var place by remember { mutableStateOf<Place?>(null) }
@@ -146,29 +146,12 @@ fun PlaceDetailScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                Icon(
-                    Icons.Filled.Place,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(48.dp),
-                )
                 Text(
-                    "Location not found",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                Text(
-                    "We couldn't load details for this destination. It may have been moved or removed.",
-                    style = MaterialTheme.typography.bodyMedium,
+                    "Place or Destination not found",
+                    style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                 )
-                GlassButton(
-                    label = "Go Back",
-                    icon = Icons.AutoMirrored.Filled.ArrowBack,
-                    onClick = onBack,
-                    accent = true,
-                )
+                GlassButton(label = "Go Back", onClick = onBack)
             }
         }
     }
@@ -178,7 +161,7 @@ fun PlaceDetailScreen(
 private fun PlaceDetailContent(
     place: Place,
     onBack: () -> Unit,
-    onNavigateToMap: (() -> Unit)? = null,
+    onNavigateToMap: ((lat: Double, lng: Double, placeId: String?) -> Unit)? = null,
     onPlanTrip: ((String) -> Unit)? = null,
 ) {
     LazyColumn(
@@ -259,7 +242,7 @@ private fun PlaceDetailContent(
                     GlassButton(
                         label = "View on Map",
                         icon = Icons.Filled.Map,
-                        onClick = { onNavigateToMap?.invoke() },
+                        onClick = { onNavigateToMap?.invoke(place.lat, place.lng, place.id) },
                         accent = true,
                         modifier = Modifier.weight(1f),
                     )
@@ -281,7 +264,7 @@ private fun DestinationDetailContent(
     relatedPlaces: List<Place>,
     onBack: () -> Unit,
     onPlaceClick: ((String) -> Unit)? = null,
-    onNavigateToMap: (() -> Unit)? = null,
+    onNavigateToMap: ((lat: Double, lng: Double, placeId: String?) -> Unit)? = null,
     onPlanTrip: ((String) -> Unit)? = null,
 ) {
     val coverColors = if (destination.cover.isNotEmpty()) destination.cover.map { Color(it) } else CoverOcean
@@ -433,7 +416,12 @@ private fun DestinationDetailContent(
                 GlassButton(
                     label = "Explore on Map",
                     icon = Icons.Filled.Map,
-                    onClick = { onNavigateToMap?.invoke() },
+                    onClick = {
+                        val first = relatedPlaces.firstOrNull()
+                        val lat = first?.lat ?: 21.0285
+                        val lng = first?.lng ?: 105.8542
+                        onNavigateToMap?.invoke(lat, lng, first?.id)
+                    },
                     modifier = Modifier.weight(1f),
                 )
                 GlassButton(

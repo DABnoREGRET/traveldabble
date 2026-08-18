@@ -44,6 +44,9 @@ object Routes {
     fun tripMap(tripId: String) = "map/$tripId"
     fun placeDetail(placeId: String) = "place/$placeId"
     fun groupTrip(tripId: String) = "group/$tripId"
+    fun mapWithLocation(lat: Double, lng: Double, placeId: String? = null): String {
+        return if (placeId != null) "map?lat=$lat&lng=$lng&placeId=$placeId" else "map?lat=$lat&lng=$lng"
+    }
 }
 
 data class BottomTab(

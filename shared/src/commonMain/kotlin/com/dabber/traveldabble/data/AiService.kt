@@ -122,8 +122,29 @@ object AiService {
                         header("Authorization", "Bearer $token")
                     }
                 }.body()
+            } catch (e: io.ktor.client.plugins.ResponseException) {
+                val errorBody = runCatching { e.response.body<String>() }.getOrNull()
+                val parsedMsg = if (!errorBody.isNullOrBlank()) {
+                    runCatching {
+                        json.parseToJsonElement(errorBody).jsonObject["error"]?.jsonPrimitive?.contentOrNull
+                    }.getOrNull() ?: errorBody
+                } else null
+
+                val errorMsg = parsedMsg ?: when (e.response.status.value) {
+                    400 -> "AI request was rejected. Please check your model settings or API key."
+                    401 -> "Invalid OpenRouter API key. Please check your key in Settings."
+                    503 -> "AI service is temporarily unavailable. Please configure your OpenRouter API key in Settings."
+                    else -> e.message ?: "AI request failed"
+                }
+                return AiResult.Error(errorMsg)
             } catch (e: Exception) {
-                return AiResult.Error(e.message ?: "AI service unavailable")
+                val msg = e.message.orEmpty()
+                val userMsg = when {
+                    msg.contains("ConnectException", true) || msg.contains("SocketTimeout", true) || msg.contains("UnknownHost", true) ->
+                        "Cannot reach AI server. Please check your internet connection."
+                    else -> e.message ?: "AI service unavailable"
+                }
+                return AiResult.Error(userMsg)
             }
 
             val responseJson = json.parseToJsonElement(rawResponse).jsonObject

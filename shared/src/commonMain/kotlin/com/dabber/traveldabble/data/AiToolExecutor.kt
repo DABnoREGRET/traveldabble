@@ -1,6 +1,8 @@
 package com.dabber.traveldabble.data
 
 import com.dabber.traveldabble.model.LocalChatMessage
+import com.dabber.traveldabble.model.Place
+import com.dabber.traveldabble.model.PlaceCategory
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.*
 
@@ -152,9 +154,8 @@ object AiToolExecutor {
         val endDate = args.get("end_date")?.jsonPrimitive?.contentOrNull ?: existing.endDate
         val travelers = args.get("travelers")?.jsonPrimitive?.intOrNull ?: existing.travelers
 
-        // Delete old trip and create new one (simple update approach)
-        Repository.deleteTrip(tripId)
-        val updated = Repository.createTrip(
+        val updated = Repository.updateTrip(
+            id = tripId,
             title = title,
             destination = destination,
             country = country,
@@ -170,6 +171,8 @@ object AiToolExecutor {
                 put("destination", updated.destination)
             },
             message = "Updated trip '${updated.title}'",
+            navigateTo = "trip_detail",
+            navigateTripId = updated.id,
         )
     }
 
@@ -194,24 +197,46 @@ object AiToolExecutor {
     private suspend fun addPlaceToItinerary(args: JsonObject?): ToolResult {
         val tripId = args?.get("trip_id")?.jsonPrimitive?.contentOrNull
             ?: return ToolResult.Error("trip_id is required")
-        val dayNumber = args.get("day_number")?.jsonPrimitive?.intOrNull
-            ?: return ToolResult.Error("day_number is required")
+        val dayNumber = args.get("day_number")?.jsonPrimitive?.intOrNull ?: 1
         val placeName = args.get("place_name")?.jsonPrimitive?.contentOrNull
             ?: return ToolResult.Error("place_name is required")
         val category = args.get("category")?.jsonPrimitive?.contentOrNull ?: "Activity"
         val startTime = args.get("start_time")?.jsonPrimitive?.contentOrNull ?: "09:00"
-        val endTime = args.get("end_time")?.jsonPrimitive?.contentOrNull ?: "10:00"
+        val endTime = args.get("end_time")?.jsonPrimitive?.contentOrNull ?: "11:00"
         val note = args.get("note")?.jsonPrimitive?.contentOrNull
 
         val trip = Repository.getTrip(tripId)
             ?: return ToolResult.Error("Trip not found: $tripId")
 
-        val dayIndex = dayNumber - 1
-        if (dayIndex < 0 || dayIndex >= trip.days.size) {
-            return ToolResult.Error("Invalid day number: $dayNumber (trip has ${trip.days.size} days)")
+        val placeCategory = when (category.lowercase()) {
+            "stay", "lodging", "hotel" -> com.dabber.traveldabble.model.PlaceCategory.STAY
+            "food", "dining", "restaurant" -> com.dabber.traveldabble.model.PlaceCategory.FOOD
+            "sight", "attraction" -> com.dabber.traveldabble.model.PlaceCategory.SIGHT
+            "transit", "transport" -> com.dabber.traveldabble.model.PlaceCategory.TRANSIT
+            else -> com.dabber.traveldabble.model.PlaceCategory.ACTIVITY
         }
 
-        // For now, return success message (actual DB update would need a dedicated endpoint)
+        val existingPlace = Repository.getPlace(placeName) ?: Place(
+            id = "place_${System.currentTimeMillis()}",
+            name = placeName,
+            category = placeCategory,
+            lat = 21.0285,
+            lng = 105.8542,
+            rating = 4.8f,
+            description = note ?: "$placeName in ${trip.destination}",
+        )
+
+        val success = Repository.addActivityToTrip(
+            tripId = tripId,
+            dayNumber = dayNumber,
+            place = existingPlace,
+            startTime = startTime,
+            endTime = endTime,
+            note = note,
+        )
+
+        if (!success) return ToolResult.Error("Failed to add activity to trip")
+
         return ToolResult.Success(
             data = buildJsonObject {
                 put("tripId", JsonPrimitive(tripId))
@@ -222,19 +247,27 @@ object AiToolExecutor {
                 put("endTime", JsonPrimitive(endTime))
             },
             message = "Added '$placeName' ($category) to Day $dayNumber of '${trip.title}'",
+            navigateTo = "itinerary",
+            navigateTripId = tripId,
         )
     }
 
     private suspend fun removePlaceFromItinerary(args: JsonObject?): ToolResult {
         val tripId = args?.get("trip_id")?.jsonPrimitive?.contentOrNull
             ?: return ToolResult.Error("trip_id is required")
-        val dayNumber = args.get("day_number")?.jsonPrimitive?.intOrNull
-            ?: return ToolResult.Error("day_number is required")
+        val dayNumber = args.get("day_number")?.jsonPrimitive?.intOrNull ?: 1
         val placeName = args.get("place_name")?.jsonPrimitive?.contentOrNull
             ?: return ToolResult.Error("place_name is required")
 
         val trip = Repository.getTrip(tripId)
             ?: return ToolResult.Error("Trip not found: $tripId")
+
+        val activity = trip.days.firstOrNull { it.dayNumber == dayNumber }
+            ?.activities?.firstOrNull { it.place.name.equals(placeName, ignoreCase = true) }
+
+        if (activity != null) {
+            Repository.removeActivityFromTrip(tripId, dayNumber, activity.id)
+        }
 
         return ToolResult.Success(
             data = buildJsonObject {

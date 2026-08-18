@@ -21,14 +21,20 @@ import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Place
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -37,6 +43,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import com.dabber.traveldabble.data.Repository
 import com.dabber.traveldabble.ui.components.CategoryBadge
+import com.dabber.traveldabble.ui.components.GlassButton
 import com.dabber.traveldabble.ui.components.GlassCard
 import com.dabber.traveldabble.ui.components.GlassChip
 import com.dabber.traveldabble.ui.components.GlassIconButton
@@ -44,6 +51,8 @@ import com.dabber.traveldabble.ui.components.GradientCover
 import com.dabber.traveldabble.ui.components.ProgressTrack
 import com.dabber.traveldabble.ui.mock.Trip
 import com.dabber.traveldabble.ui.mock.toUi
+import com.dabber.traveldabble.ui.theme.Danger
+import kotlinx.coroutines.launch
 
 @Composable
 fun TripDetailScreen(
@@ -57,6 +66,8 @@ fun TripDetailScreen(
 ) {
     var trip by remember { mutableStateOf<Trip?>(null) }
     var loading by remember { mutableStateOf(true) }
+    var showDeleteTripDialog by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
 
     LaunchedEffect(tripId) {
         loading = true
@@ -162,8 +173,53 @@ fun TripDetailScreen(
                     }
                 }
                 item { BudgetSnapshot(loadedTrip, onOpenBudget) }
+                item {
+                    Spacer(Modifier.height(8.dp))
+                    GlassButton(
+                        label = "Delete Trip",
+                        icon = Icons.Filled.Delete,
+                        onClick = { showDeleteTripDialog = true },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp),
+                    )
+                }
             }
         }
+    }
+
+    if (showDeleteTripDialog && trip != null) {
+        val currentTrip = trip!!
+        AlertDialog(
+            onDismissRequest = { showDeleteTripDialog = false },
+            title = { Text("Delete Trip?") },
+            text = {
+                Text(
+                    "Are you sure you want to delete '${currentTrip.title}'? All associated itineraries, activities, and budget expenses will be permanently removed.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        scope.launch {
+                            Repository.deleteTrip(currentTrip.id)
+                            showDeleteTripDialog = false
+                            onBack()
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Danger),
+                ) {
+                    Text("Delete Trip")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteTripDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }
 

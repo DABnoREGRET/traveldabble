@@ -187,6 +187,19 @@ private fun TravelNavHost(navController: NavHostController) {
         composable(Routes.Map) {
             MapScreen(onPlaceClick = { navController.navigate(Routes.placeDetail(it)) })
         }
+        composable(
+            route = "map?lat={lat}&lng={lng}&placeId={placeId}",
+        ) { entry ->
+            val lat = entry.arguments?.getString("lat")?.toDoubleOrNull()
+            val lng = entry.arguments?.getString("lng")?.toDoubleOrNull()
+            val placeId = entry.arguments?.getString("placeId")
+            MapScreen(
+                initialLat = lat,
+                initialLng = lng,
+                focusPlaceId = placeId,
+                onPlaceClick = { navController.navigate(Routes.placeDetail(it)) },
+            )
+        }
         composable(Routes.Ai) {
             AiChatScreen(
                 tripId = "general",
@@ -211,6 +224,9 @@ private fun TravelNavHost(navController: NavHostController) {
                         "account" -> navController.navigate(Routes.SettingsAccount)
                         "trip_detail" -> {
                             tripId?.let { navController.navigate(Routes.tripDetail(it)) }
+                        }
+                        "itinerary" -> {
+                            tripId?.let { navController.navigate(Routes.itinerary(it)) }
                         }
                         "create_trip" -> navController.navigate(Routes.CreateTrip)
                     }
@@ -264,7 +280,10 @@ private fun TravelNavHost(navController: NavHostController) {
         }
         composable(Routes.Budget) { entry ->
             val tripId = entry.stringArg("tripId").orEmpty()
-            BudgetScreen(tripId = tripId, onBack = { navController.popBackStack() })
+            BudgetScreen(
+                tripId = tripId,
+                onBack = { navController.popBackStack() },
+            )
         }
         composable(Routes.TripMap) { entry ->
             val tripId = entry.stringArg("tripId").orEmpty()
@@ -282,8 +301,10 @@ private fun TravelNavHost(navController: NavHostController) {
                 onPlaceClick = { targetPlaceId ->
                     navController.navigate(Routes.placeDetail(targetPlaceId))
                 },
-                onNavigateToMap = {
-                    navController.navigate(Routes.Map)
+                onNavigateToMap = { lat, lng, targetPlaceId ->
+                    navController.navigate(Routes.mapWithLocation(lat, lng, targetPlaceId)) {
+                        popUpTo(Routes.Home)
+                    }
                 },
                 onNavigateToPlanTrip = { _ ->
                     navController.navigate(Routes.CreateTrip)
@@ -338,14 +359,6 @@ private fun NavBackStackEntry.stringArg(key: String): String? =
 /**
  * The bottom bar is visible only on the five tab destinations (Home, Trips,
  * Map, AI, Profile).
- *
- * [androidx.navigation.NavDestination.route] reports the route *pattern*
- * (e.g. "trip/{tripId}"), so an exact match against the tab routes is the
- * pattern matching: every pushed detail route ("trip/{tripId}",
- * "itinerary/{tripId}", "budget/{tripId}", "map/{tripId}", "place/{placeId}",
- * "explore", "createTrip", "onboarding") differs from every tab pattern, so the
- * bar correctly hides on all non-tab screens — including the per-trip map
- * ("map/{tripId}"), which must not be confused with the Map tab ("map").
  */
 private fun isBottomTabRoute(route: String?): Boolean =
-    route != null && bottomTabs.any { tab -> route == tab.route }
+    route != null && (bottomTabs.any { tab -> route == tab.route } || route.startsWith("map?"))

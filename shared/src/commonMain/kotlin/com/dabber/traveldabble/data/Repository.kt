@@ -1,17 +1,66 @@
 package com.dabber.traveldabble.data
 
+import com.dabber.traveldabble.model.ActivityItem
 import com.dabber.traveldabble.model.Budget
+import com.dabber.traveldabble.model.DayPlan
 import com.dabber.traveldabble.model.Destination
+import com.dabber.traveldabble.model.Expense
 import com.dabber.traveldabble.model.Place
 import com.dabber.traveldabble.model.Trip
 import com.dabber.traveldabble.model.TripMember
 import com.dabber.traveldabble.ui.mock.MockData
 import com.dabber.traveldabble.ui.mock.toDomain
+import com.russhwolf.settings.Settings
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 
 object Repository {
-    // User-created trips in local storage
+    private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
+    private val kvSettings by lazy {
+        try {
+            Settings()
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
+    private const val LOCAL_TRIPS_KEY = "traveldabble_local_user_trips"
+    private const val DELETED_DEMO_TRIPS_KEY = "traveldabble_deleted_demo_trips"
+
+    // In-memory cache synced with persistent Settings
     private val localUserTrips = mutableListOf<Trip>()
     private val deletedDemoTripIds = mutableSetOf<String>()
+
+    init {
+        loadPersistedData()
+    }
+
+    private fun loadPersistedData() {
+        try {
+            val storedTrips = kvSettings?.getStringOrNull(LOCAL_TRIPS_KEY)
+            if (!storedTrips.isNullOrBlank()) {
+                val list = json.decodeFromString<List<Trip>>(storedTrips)
+                localUserTrips.clear()
+                localUserTrips.addAll(list)
+            }
+        } catch (_: Throwable) {}
+
+        try {
+            val storedDeleted = kvSettings?.getStringOrNull(DELETED_DEMO_TRIPS_KEY)
+            if (!storedDeleted.isNullOrBlank()) {
+                val list = json.decodeFromString<List<String>>(storedDeleted)
+                deletedDemoTripIds.clear()
+                deletedDemoTripIds.addAll(list)
+            }
+        } catch (_: Throwable) {}
+    }
+
+    private fun savePersistedData() {
+        try {
+            kvSettings?.putString(LOCAL_TRIPS_KEY, json.encodeToString(localUserTrips))
+            kvSettings?.putString(DELETED_DEMO_TRIPS_KEY, json.encodeToString(deletedDemoTripIds.toList()))
+        } catch (_: Throwable) {}
+    }
 
     suspend fun getTrips(): List<Trip> {
         if (AuthState.isLoggedIn && !AuthState.isGuestMode) {
@@ -82,6 +131,13 @@ object Repository {
             }
         }
 
+        // Generate initial day structure
+        val initialDays = listOf(
+            DayPlan(dayNumber = 1, dateLabel = startDate.ifEmpty { "Day 1" }, activities = emptyList()),
+            DayPlan(dayNumber = 2, dateLabel = "Day 2", activities = emptyList()),
+            DayPlan(dayNumber = 3, dateLabel = endDate.ifEmpty { "Day 3" }, activities = emptyList()),
+        )
+
         val newTrip = remoteCreated ?: Trip(
             id = "trip_${System.currentTimeMillis()}",
             title = title,
@@ -92,7 +148,7 @@ object Repository {
             daysUntil = 14,
             cover = cover,
             travelers = travelers,
-            days = emptyList(),
+            days = initialDays,
             budget = Budget(
                 total = 1500.0,
                 categories = listOf("Lodging" to 600.0, "Food" to 400.0, "Transport" to 300.0, "Activities" to 200.0),
@@ -100,13 +156,147 @@ object Repository {
             ),
         )
 
+        localUserTrips.removeAll { it.id == newTrip.id }
         localUserTrips.add(0, newTrip)
+        savePersistedData()
         return newTrip
+    }
+
+    suspend fun saveTrip(trip: Trip): Boolean {
+        val index = localUserTrips.indexOfFirst { it.id == trip.id }
+        if (index >= 0) {
+            localUserTrips[index] = trip
+        } else {
+            localUserTrips.add(0, trip)
+        }
+        savePersistedData()
+        return true
+    }
+
+    suspend fun updateTrip(
+        id: String,
+        title: String? = null,
+        destination: String? = null,
+        country: String? = null,
+        startDate: String? = null,
+        endDate: String? = null,
+        travelers: Int? = null,
+    ): Trip? {
+        val existing = getTrip(id) ?: return null
+        val updated = existing.copy(
+            title = title ?: existing.title,
+            destination = destination ?: existing.destination,
+            country = country ?: existing.country,
+            startDate = startDate ?: existing.startDate,
+            endDate = endDate ?: existing.endDate,
+            travelers = travelers ?: existing.travelers,
+        )
+        saveTrip(updated)
+        return updated
+    }
+
+    suspend fun addActivityToTrip(
+        tripId: String,
+        dayNumber: Int,
+        place: Place,
+        startTime: String = "09:00",
+        endTime: String = "11:00",
+        note: String? = null,
+    ): Boolean {
+        val trip = getTrip(tripId) ?: return false
+        val newActivity = ActivityItem(
+            id = "act_${System.currentTimeMillis()}",
+            place = place,
+            startTime = startTime,
+            endTime = endTime,
+            note = note,
+        )
+
+        val updatedDays = if (trip.days.none { it.dayNumber == dayNumber }) {
+            trip.days + DayPlan(dayNumber = dayNumber, dateLabel = "Day $dayNumber", activities = listOf(newActivity))
+        } else {
+            trip.days.map { day ->
+                if (day.dayNumber == dayNumber) {
+                    day.copy(activities = day.activities + newActivity)
+                } else {
+                    day
+                }
+            }
+        }
+
+        saveTrip(trip.copy(days = updatedDays))
+        return true
+    }
+
+    suspend fun removeActivityFromTrip(tripId: String, dayNumber: Int, activityId: String): Boolean {
+        val trip = getTrip(tripId) ?: return false
+        val updatedDays = trip.days.map { day ->
+            if (day.dayNumber == dayNumber) {
+                day.copy(activities = day.activities.filterNot { it.id == activityId })
+            } else {
+                day
+            }
+        }
+        saveTrip(trip.copy(days = updatedDays))
+        return true
+    }
+
+    suspend fun addExpenseToTrip(
+        tripId: String,
+        title: String,
+        category: String,
+        amount: Double,
+        date: String = "Today",
+    ): Boolean {
+        val trip = getTrip(tripId) ?: return false
+        val newExpense = Expense(
+            id = "exp_${System.currentTimeMillis()}",
+            title = title,
+            category = category,
+            amount = amount,
+            date = date,
+        )
+        val updatedExpenses = trip.budget.expenses + newExpense
+        val updatedBudget = trip.budget.copy(expenses = updatedExpenses)
+        saveTrip(trip.copy(budget = updatedBudget))
+        return true
+    }
+
+    suspend fun removeExpenseFromTrip(tripId: String, expenseId: String): Boolean {
+        val trip = getTrip(tripId) ?: return false
+        val updatedExpenses = trip.budget.expenses.filterNot { it.id == expenseId }
+        val updatedBudget = trip.budget.copy(expenses = updatedExpenses)
+        saveTrip(trip.copy(budget = updatedBudget))
+        return true
+    }
+
+    suspend fun updateTripBudget(tripId: String, totalBudget: Double): Boolean {
+        val trip = getTrip(tripId) ?: return false
+        val ratio = if (trip.budget.total > 0) totalBudget / trip.budget.total else 1.0
+        val updatedCategories = trip.budget.categories.map { (cat, amt) -> cat to (amt * ratio) }
+        val updatedBudget = trip.budget.copy(
+            total = totalBudget,
+            categories = updatedCategories.ifEmpty {
+                listOf("Lodging" to totalBudget * 0.4, "Food" to totalBudget * 0.25, "Transport" to totalBudget * 0.2, "Activities" to totalBudget * 0.15)
+            }
+        )
+        saveTrip(trip.copy(budget = updatedBudget))
+        return true
+    }
+
+    suspend fun clearAllData() {
+        localUserTrips.clear()
+        deletedDemoTripIds.clear()
+        try {
+            kvSettings?.remove(LOCAL_TRIPS_KEY)
+            kvSettings?.remove(DELETED_DEMO_TRIPS_KEY)
+        } catch (_: Throwable) {}
     }
 
     suspend fun deleteTrip(id: String): Boolean {
         localUserTrips.removeAll { it.id == id }
         deletedDemoTripIds.add(id)
+        savePersistedData()
 
         if (AuthState.isLoggedIn && !AuthState.isGuestMode) {
             try {
@@ -136,6 +326,12 @@ object Repository {
         if (remote != null) return remote
 
         return MockData.destinations.firstOrNull { it.id == id }?.toDomain()
+    }
+
+    suspend fun getPlaces(): List<Place> {
+        val allTripsPlaces = getTrips().flatMap { it.days }.flatMap { it.activities }.map { it.place }
+        val allMockPlaces = MockData.hanoiPlaces + MockData.centralPlaces + MockData.haGiangPlaces + MockData.saigonPlaces + MockData.ninhBinhPlaces
+        return (allTripsPlaces + allMockPlaces).distinctBy { it.id }
     }
 
     suspend fun getPlace(id: String): Place? {

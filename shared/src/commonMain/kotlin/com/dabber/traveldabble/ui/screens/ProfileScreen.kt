@@ -29,16 +29,17 @@ import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Replay
 import androidx.compose.material.icons.filled.Security
-import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -46,7 +47,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import com.dabber.traveldabble.data.AuthState
@@ -75,6 +75,7 @@ fun ProfileScreen(
     var tripCount by remember { mutableIntStateOf(0) }
     var countryCount by remember { mutableIntStateOf(0) }
     var daysAway by remember { mutableIntStateOf(0) }
+    var showLogoutDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         val trips = Repository.getTrips()
@@ -95,6 +96,35 @@ fun ProfileScreen(
             .collect { (index, offset) ->
                 ScrollState.onScroll(index, offset)
             }
+    }
+
+    if (showLogoutDialog) {
+        AlertDialog(
+            onDismissRequest = { showLogoutDialog = false },
+            title = { Text("Log Out?") },
+            text = {
+                Text(
+                    "Are you sure you want to log out of your account? Your local trips will remain on this device.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showLogoutDialog = false
+                        onLogout()
+                    },
+                ) {
+                    Text("Log Out")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLogoutDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 
     LazyColumn(
@@ -280,7 +310,7 @@ fun ProfileScreen(
                 GlassButton(
                     label = "Log out",
                     icon = Icons.AutoMirrored.Filled.Logout,
-                    onClick = onLogout,
+                    onClick = { showLogoutDialog = true },
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 20.dp),

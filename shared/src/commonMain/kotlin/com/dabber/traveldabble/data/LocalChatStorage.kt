@@ -265,4 +265,18 @@ object LocalChatStorage {
     fun getMessageCount(conversationId: String): Int {
         return loadMessages(conversationId).size
     }
+
+    /**
+     * Clear all conversations and all chat history
+     */
+    fun clearAll() {
+        inMemoryCache.clear()
+        conversationsCache?.clear()
+        try {
+            val convs = loadConversations()
+            convs.forEach { c -> kvSettings?.remove(storageKey(c.id)) }
+            kvSettings?.remove(CONVERSATIONS_KEY)
+            kvSettings?.remove(ACTIVE_CONV_KEY)
+        } catch (_: Throwable) {}
+    }
 }
