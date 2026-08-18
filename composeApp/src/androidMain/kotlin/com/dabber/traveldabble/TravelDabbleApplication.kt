@@ -1,7 +1,7 @@
 package com.dabber.traveldabble
 
 import android.app.Application
-import org.maplibre.android.MapLibre
+import android.util.Log
 
 /**
  * Android Application class to guarantee safe early initialization
@@ -10,10 +10,18 @@ import org.maplibre.android.MapLibre
 class TravelDabbleApplication : Application() {
     override fun onCreate() {
         super.onCreate()
+
+        // Capture and log any unexpected top-level exceptions to Android Logcat
+        val previousHandler = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            Log.e("TravelDabble", "CRITICAL UNCAUGHT EXCEPTION on thread '${thread.name}': ${throwable.message}", throwable)
+            previousHandler?.uncaughtException(thread, throwable)
+        }
+
         try {
-            MapLibre.getInstance(this)
-        } catch (_: Throwable) {
-            // Graceful fallback if native binaries (.so) fail to load on a specific device
+            org.maplibre.android.MapLibre.getInstance(this)
+        } catch (t: Throwable) {
+            Log.w("TravelDabble", "MapLibre early initialization notice: ${t.message}")
         }
     }
 }

@@ -1,25 +1,29 @@
 package com.dabber.traveldabble.ui.components
 
-import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.TravelExplore
+import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import traveldabble.shared.generated.resources.Res
-import traveldabble.shared.generated.resources.ic_travel_dabble_logo
+import com.dabber.traveldabble.ui.theme.AuroraGold
 import com.dabber.traveldabble.ui.theme.AuroraTeal
-import org.jetbrains.compose.resources.painterResource
+import com.dabber.traveldabble.ui.theme.JadeGreen
 
 /**
  * Tropical Vector Logo for Travel Dabble.
- * Loads the actual vector SVG / XML logo asset (Res.drawable.ic_travel_dabble_logo).
+ * Rendered using pure Compose Multiplatform graphics for 100% crash-proof,
+ * zero-latency rendering across all Android and KMP targets.
  */
 @Composable
 fun TropicalLogo(
@@ -27,6 +31,8 @@ fun TropicalLogo(
     size: Dp = 64.dp,
     showBackground: Boolean = true,
 ) {
+    val cornerRadius = size * 0.26f
+
     Box(
         modifier = modifier
             .size(size)
@@ -35,21 +41,30 @@ fun TropicalLogo(
                     Modifier
                         .shadow(
                             elevation = 8.dp,
-                            shape = RoundedCornerShape(size * 0.26f),
+                            shape = RoundedCornerShape(cornerRadius),
                             spotColor = AuroraTeal.copy(alpha = 0.35f),
                         )
-                        .clip(RoundedCornerShape(size * 0.26f))
+                        .clip(RoundedCornerShape(cornerRadius))
+                        .background(
+                            Brush.linearGradient(
+                                listOf(
+                                    Color(0xFF064E3B), // Tropical Jungle Green
+                                    JadeGreen,         // Emerald
+                                    Color(0xFF0F172A), // Ocean Navy
+                                )
+                            )
+                        )
                 } else {
                     Modifier
                 }
             ),
         contentAlignment = Alignment.Center,
     ) {
-        Image(
-            painter = painterResource(Res.drawable.ic_travel_dabble_logo),
+        Icon(
+            imageVector = Icons.Filled.TravelExplore,
             contentDescription = "Travel Dabble Tropical Logo",
-            contentScale = ContentScale.Fit,
-            modifier = Modifier.size(size),
+            tint = AuroraGold,
+            modifier = Modifier.size(size * 0.62f),
         )
     }
 }
