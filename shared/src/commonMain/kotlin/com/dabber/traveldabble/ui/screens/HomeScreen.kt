@@ -332,9 +332,16 @@ private fun NextTripCard(trip: Trip, onTripClick: () -> Unit) {
                     .clip(RoundedCornerShape(16.dp)),
             ) {
                 val places = trip.days.flatMap { it.activities }.map { it.place }.distinctBy { it.id }
+                val currentMapStyle = when (com.dabber.traveldabble.data.SettingsState.defaultMapStyle) {
+                    com.dabber.traveldabble.data.MapStyleSetting.Liberty -> MapStyle.Liberty
+                    com.dabber.traveldabble.data.MapStyleSetting.Positron -> MapStyle.Positron
+                    com.dabber.traveldabble.data.MapStyleSetting.Bright -> MapStyle.Bright
+                    com.dabber.traveldabble.data.MapStyleSetting.Dark -> MapStyle.Dark
+                    com.dabber.traveldabble.data.MapStyleSetting.Fiord -> MapStyle.Fiord
+                }
                 TravelMap(
                     places = places,
-                    style = MapStyle.Liberty,
+                    style = currentMapStyle,
                     modifier = Modifier.fillMaxSize(),
                     tilt3d = false,
                 )

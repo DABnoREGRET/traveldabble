@@ -233,4 +233,23 @@ object ApiClient {
             matchesQuery && matchesCountry
         }
     }
+
+    // Routing endpoints
+    suspend fun getRoute(waypoints: List<Pair<Double, Double>>, profile: String = "driving"): com.dabber.traveldabble.model.Route? {
+        if (waypoints.size < 2) return null
+        return try {
+            val response: HttpResponse = httpClient.post("$baseUrl/api/route") {
+                authHeader()
+                contentType(ContentType.Application.Json)
+                setBody(mapOf("waypoints" to waypoints.map { listOf(it.first, it.second) }, "profile" to profile))
+            }
+            if (response.status.value in 200..299) {
+                response.body<com.dabber.traveldabble.model.Route>()
+            } else {
+                null
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
 }

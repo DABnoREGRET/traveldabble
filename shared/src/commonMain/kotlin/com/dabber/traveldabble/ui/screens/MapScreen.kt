@@ -6,6 +6,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import com.dabber.traveldabble.ui.components.bounceClick
 import androidx.compose.foundation.horizontalScroll
@@ -51,38 +52,51 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.dabber.traveldabble.data.MapStyleSetting
 import com.dabber.traveldabble.data.Repository
 import com.dabber.traveldabble.data.SettingsState
-import com.dabber.traveldabble.data.ThemeMode
 import com.dabber.traveldabble.model.DayPlan
 import com.dabber.traveldabble.model.Place
 import com.dabber.traveldabble.model.PlaceCategory
 import com.dabber.traveldabble.ui.components.CategoryBadge
-import com.dabber.traveldabble.ui.components.GlassCard
 import com.dabber.traveldabble.ui.components.GlassChip
-import com.dabber.traveldabble.ui.glass.GlassIntensity
-import com.dabber.traveldabble.ui.glass.glass
 import com.dabber.traveldabble.ui.map.MapStyle
 import com.dabber.traveldabble.ui.map.TravelMap
 import com.dabber.traveldabble.ui.mock.Trip
 import com.dabber.traveldabble.ui.mock.icon
 import com.dabber.traveldabble.ui.mock.tint
 import com.dabber.traveldabble.ui.mock.toUi
-import com.dabber.traveldabble.ui.theme.AuroraBlue
 import com.dabber.traveldabble.ui.theme.AuroraGold
 import com.dabber.traveldabble.ui.theme.AuroraTeal
+import com.dabber.traveldabble.ui.theme.SpaceDeep
+import com.dabber.traveldabble.ui.theme.SpaceNight
 
 /**
- * Google Maps styled interactive Map screen with:
- * - Floating top search/trip header with category filter pills
- * - Right-hand side floating control stack (3D/2D, Layer switcher, GPS My Location)
- * - Day-by-Day Itinerary drawer with route overview and step-by-step navigation
- * - Google Maps styled teardrop pin markers
+ * High-contrast surface modifier for floating map cards to eliminate "bright on bright" issues.
+ */
+@Composable
+private fun Modifier.mapCardSurface(shape: Shape = RoundedCornerShape(20.dp)): Modifier {
+    val isDark = MaterialTheme.colorScheme.background == SpaceNight || MaterialTheme.colorScheme.surface == SpaceDeep
+    val bgColor = if (isDark) Color(0xF40F172A) else Color(0xFAFFFFFF)
+    val borderColor = if (isDark) Color(0x33FFFFFF) else Color(0x240F172A)
+
+    return this
+        .shadow(8.dp, shape)
+        .clip(shape)
+        .background(bgColor)
+        .border(1.dp, borderColor, shape)
+}
+
+/**
+ * Google Maps styled interactive Map screen with high-contrast surfaces,
+ * real roadway curve navigation, and crash-proof style switcher.
  */
 @Composable
 fun MapScreen(
@@ -101,14 +115,18 @@ fun MapScreen(
     var selectedCategoryFilter by remember { mutableStateOf<PlaceCategory?>(null) }
     var isDrawerExpanded by remember { mutableStateOf(true) }
 
-    // Map style automatically follows app theme or user preference
-    val defaultStyle = remember {
-        when (SettingsState.themeMode) {
-            ThemeMode.Dark -> MapStyle.Dark
-            else -> MapStyle.Liberty
-        }
+    // Map style from persistent SettingsState
+    var style by remember {
+        mutableStateOf(
+            when (SettingsState.defaultMapStyle) {
+                MapStyleSetting.Liberty -> MapStyle.Liberty
+                MapStyleSetting.Positron -> MapStyle.Positron
+                MapStyleSetting.Bright -> MapStyle.Bright
+                MapStyleSetting.Dark -> MapStyle.Dark
+                MapStyleSetting.Fiord -> MapStyle.Fiord
+            }
+        )
     }
-    var style by remember { mutableStateOf(defaultStyle) }
     var tilt3d by remember { mutableStateOf(true) }
     var showPolylines by remember { mutableStateOf(true) }
     var showUserLocation by remember { mutableStateOf(true) }
@@ -161,7 +179,7 @@ fun MapScreen(
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        // 1. Google Maps Vector Surface
+        // 1. Google Maps Vector Surface with turn-by-turn road curves
         TravelMap(
             places = placesForMap,
             style = style,
@@ -186,10 +204,11 @@ fun MapScreen(
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             // Search / Trip Bar Card
-            GlassCard(
-                modifier = Modifier.fillMaxWidth(),
-                contentPadding = 10.dp,
-                intensity = GlassIntensity.Prominent,
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .mapCardSurface(RoundedCornerShape(18.dp))
+                    .padding(12.dp),
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -267,7 +286,7 @@ fun MapScreen(
                 }
             }
 
-            // Quick Category Filters (Google Maps Pill Bar)
+            // Quick Category Filters (Pill Bar)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -294,12 +313,12 @@ fun MapScreen(
             }
         }
 
-        // 3. Right-Hand Side Floating Action Control Stack (Google Maps Style)
+        // 3. Right-Hand Side Floating Action Control Stack
         Column(
             modifier = Modifier
                 .align(Alignment.TopEnd)
                 .statusBarsPadding()
-                .padding(top = 110.dp, end = 16.dp),
+                .padding(top = 118.dp, end = 16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
             horizontalAlignment = Alignment.End,
         ) {
@@ -321,6 +340,15 @@ fun MapScreen(
                         },
                         onClick = {
                             style = s
+                            SettingsState.updateDefaultMapStyle(
+                                when (s) {
+                                    MapStyle.Liberty, MapStyle.ThreeD -> MapStyleSetting.Liberty
+                                    MapStyle.Positron -> MapStyleSetting.Positron
+                                    MapStyle.Bright -> MapStyleSetting.Bright
+                                    MapStyle.Dark -> MapStyleSetting.Dark
+                                    MapStyle.Fiord -> MapStyleSetting.Fiord
+                                }
+                            )
                             showLayerMenu = false
                         },
                     )
@@ -396,7 +424,7 @@ private fun MapFloatingButton(
         modifier = Modifier
             .size(44.dp)
             .bounceClick(pressedScale = 0.90f, onClick = onClick)
-            .glass(CircleShape, GlassIntensity.Prominent),
+            .mapCardSurface(CircleShape),
         contentAlignment = Alignment.Center,
     ) {
         Icon(
@@ -417,12 +445,12 @@ private fun TripDayDrawer(
     onSelectDay: (Int?) -> Unit,
     onPlaceClick: (Place) -> Unit,
 ) {
-    GlassCard(
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp),
-        intensity = GlassIntensity.Prominent,
-        contentPadding = 12.dp,
+            .padding(horizontal = 16.dp)
+            .mapCardSurface(RoundedCornerShape(22.dp))
+            .padding(14.dp),
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             // Drawer Header with Day Tabs
@@ -519,7 +547,7 @@ private fun ItineraryStopCard(
         modifier = Modifier
             .width(210.dp)
             .bounceClick(pressedScale = 0.95f, onClick = onClick)
-            .glass(RoundedCornerShape(16.dp), GlassIntensity.Standard)
+            .mapCardSurface(RoundedCornerShape(16.dp))
             .padding(10.dp),
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -574,11 +602,12 @@ private fun PlaceDetailPopup(
     onOpen: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    GlassCard(
-        modifier = modifier.fillMaxWidth(),
-        onClick = onOpen,
-        intensity = GlassIntensity.Prominent,
-        contentPadding = 12.dp,
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .bounceClick(pressedScale = 0.98f, onClick = onOpen)
+            .mapCardSurface(RoundedCornerShape(20.dp))
+            .padding(12.dp),
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
