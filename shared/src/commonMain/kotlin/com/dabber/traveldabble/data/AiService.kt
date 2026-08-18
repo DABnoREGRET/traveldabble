@@ -208,6 +208,19 @@ object AiService {
         }
     }
 
+    val DEFAULT_AI_MODELS = listOf(
+        AiModelOption("google/gemma-4-26b-a4b-it:free", "Gemma 4 26B (Free)", "Google's lightweight model optimized for chat & tools", isFree = true),
+        AiModelOption("meta-llama/llama-3.3-70b-instruct:free", "Llama 3.3 70B (Free)", "Meta's flagship open model with excellent reasoning", isFree = true),
+        AiModelOption("mistralai/mistral-small-24b-instruct-2501:free", "Mistral Small 24B (Free)", "Fast and capable conversational model", isFree = true),
+        AiModelOption("deepseek/deepseek-r1:free", "DeepSeek R1 (Free)", "State-of-the-art open reasoning model", isFree = true),
+        AiModelOption("qwen/qwen-2.5-72b-instruct:free", "Qwen 2.5 72B (Free)", "Powerful multilingual travel planning model", isFree = true),
+        AiModelOption("anthropic/claude-3.5-sonnet", "Claude 3.5 Sonnet", "Industry-leading intelligence and tool usage", isFree = false),
+        AiModelOption("openai/gpt-4o", "GPT-4o", "Flagship OpenAI multimodal intelligence", isFree = false),
+        AiModelOption("openai/gpt-4o-mini", "GPT-4o Mini", "Fast, low-cost OpenAI model", isFree = false),
+        AiModelOption("google/gemini-2.0-flash-001", "Gemini 2.0 Flash", "Ultra-fast Next-Gen Google model", isFree = false),
+        AiModelOption("deepseek/deepseek-chat", "DeepSeek V3", "High-performance versatile foundation model", isFree = false),
+    )
+
     /**
      * Dynamically fetch available OpenRouter models from the server / OpenRouter public API.
      */
@@ -217,19 +230,21 @@ object AiService {
             val responseJson = json.parseToJsonElement(rawResponse).jsonObject
             val modelsArray = responseJson["models"]?.jsonArray
             if (!modelsArray.isNullOrEmpty()) {
-                modelsArray.mapNotNull { item ->
+                val parsed = modelsArray.mapNotNull { item ->
                     val obj = item.jsonObject
                     val id = obj["id"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
                     val name = obj["name"]?.jsonPrimitive?.contentOrNull ?: id
                     val description = obj["description"]?.jsonPrimitive?.contentOrNull ?: ""
-                    val isFree = obj["is_free"]?.jsonPrimitive?.contentOrNull?.toBooleanStrictOrNull() ?: false
+                    val isFree = obj["is_free"]?.jsonPrimitive?.contentOrNull?.toBooleanStrictOrNull()
+                        ?: id.endsWith(":free")
                     AiModelOption(id, name, description, isFree)
                 }
+                if (parsed.isNotEmpty()) parsed else DEFAULT_AI_MODELS
             } else {
-                listOf(AiModelOption(DEFAULT_AI_MODEL, "Gemma 4 26B (Free)", isFree = true))
+                DEFAULT_AI_MODELS
             }
         } catch (_: Exception) {
-            listOf(AiModelOption(DEFAULT_AI_MODEL, "Gemma 4 26B (Free)", isFree = true))
+            DEFAULT_AI_MODELS
         }
     }
 }

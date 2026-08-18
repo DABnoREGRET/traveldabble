@@ -14,13 +14,17 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.Map
+import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -33,43 +37,135 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.dabber.traveldabble.data.Repository
+import com.dabber.traveldabble.model.Destination
 import com.dabber.traveldabble.model.Place
 import com.dabber.traveldabble.ui.components.CategoryBadge
 import com.dabber.traveldabble.ui.components.GlassButton
+import com.dabber.traveldabble.ui.components.GlassCard
 import com.dabber.traveldabble.ui.components.GlassChip
 import com.dabber.traveldabble.ui.components.GlassIconButton
 import com.dabber.traveldabble.ui.components.GradientCover
+import com.dabber.traveldabble.ui.mock.MockData
 import com.dabber.traveldabble.ui.mock.icon
 import com.dabber.traveldabble.ui.mock.tint
+import com.dabber.traveldabble.ui.mock.toDomain
 import com.dabber.traveldabble.ui.theme.AuroraGold
+import com.dabber.traveldabble.ui.theme.AuroraTeal
+import com.dabber.traveldabble.ui.theme.CoverOcean
 
 @Composable
-fun PlaceDetailScreen(placeId: String, onBack: () -> Unit) {
+fun PlaceDetailScreen(
+    placeId: String,
+    onBack: () -> Unit,
+    onNavigateToPlanTrip: ((String) -> Unit)? = null,
+) {
     var place by remember { mutableStateOf<Place?>(null) }
+    var destination by remember { mutableStateOf<Destination?>(null) }
+    var relatedPlaces by remember { mutableStateOf<List<Place>>(emptyList()) }
+    var loading by remember { mutableStateOf(true) }
 
     LaunchedEffect(placeId) {
-        val trips = Repository.getTrips()
-        place = trips.flatMap { it.days }
-            .flatMap { it.activities }
-            .map { it.place }
-            .firstOrNull { it.id == placeId }
+        loading = true
+
+        // 1. Try finding as a Place
+        val foundPlace = Repository.getPlace(placeId)
+        if (foundPlace != null) {
+            place = foundPlace
+            loading = false
+            return@LaunchedEffect
+        }
+
+        // 2. Try finding as a Destination
+        val foundDest = Repository.getDestination(placeId)
+            ?: MockData.destinations.firstOrNull { it.id == placeId || it.name.equals(placeId, ignoreCase = true) }?.toDomain()
+
+        if (foundDest != null) {
+            destination = foundDest
+            // Find places located in this destination area
+            val destName = foundDest.name.lowercase()
+            val allMockPlaces = MockData.hanoiPlaces + MockData.centralPlaces + MockData.haGiangPlaces + MockData.saigonPlaces + MockData.ninhBinhPlaces
+            relatedPlaces = when {
+                destName.contains("hanoi") || destName.contains("ha long") -> MockData.hanoiPlaces
+                destName.contains("hoi an") || destName.contains("da nang") -> MockData.centralPlaces
+                destName.contains("ha giang") -> MockData.haGiangPlaces
+                destName.contains("ho chi minh") || destName.contains("saigon") -> MockData.saigonPlaces
+                destName.contains("ninh binh") -> MockData.ninhBinhPlaces
+                else -> allMockPlaces.take(5)
+            }
+            loading = false
+            return@LaunchedEffect
+        }
+
+        loading = false
     }
 
-    val loadedPlace = place
-
-    if (loadedPlace == null) {
+    if (loading) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text(
-                "Loading destination…",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
         }
         return
     }
 
+    val currentPlace = place
+    val currentDest = destination
+
+    if (currentPlace != null) {
+        // Render Place Details
+        PlaceDetailContent(place = currentPlace, onBack = onBack)
+    } else if (currentDest != null) {
+        // Render Destination Details
+        DestinationDetailContent(
+            destination = currentDest,
+            relatedPlaces = relatedPlaces,
+            onBack = onBack,
+            onPlanTrip = onNavigateToPlanTrip,
+        )
+    } else {
+        // Not found fallback
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .statusBarsPadding()
+                .padding(24.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                Icon(
+                    Icons.Filled.Place,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(48.dp),
+                )
+                Text(
+                    "Location not found",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    "We couldn't load details for this destination. It may have been moved or removed.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                )
+                GlassButton(
+                    label = "Go Back",
+                    icon = Icons.AutoMirrored.Filled.ArrowBack,
+                    onClick = onBack,
+                    accent = true,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PlaceDetailContent(place: Place, onBack: () -> Unit) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(bottom = 40.dp),
@@ -77,7 +173,7 @@ fun PlaceDetailScreen(placeId: String, onBack: () -> Unit) {
         item {
             Box {
                 GradientCover(
-                    gradient = listOf(loadedPlace.category.tint, loadedPlace.category.tint.copy(alpha = 0.5f)),
+                    gradient = listOf(place.category.tint, place.category.tint.copy(alpha = 0.5f)),
                     modifier = Modifier.fillMaxWidth().height(230.dp),
                 )
                 GlassIconButton(
@@ -92,8 +188,8 @@ fun PlaceDetailScreen(placeId: String, onBack: () -> Unit) {
                     modifier = Modifier.align(Alignment.BottomStart).padding(20.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    GlassChip(label = loadedPlace.category.label, tint = Color.White)
-                    Text(loadedPlace.name, style = MaterialTheme.typography.displaySmall, color = Color.White)
+                    GlassChip(label = place.category.label, tint = Color.White)
+                    Text(place.name, style = MaterialTheme.typography.displaySmall, color = Color.White)
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -101,12 +197,12 @@ fun PlaceDetailScreen(placeId: String, onBack: () -> Unit) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Filled.Star, null, tint = AuroraGold, modifier = Modifier.size(15.dp))
                             Spacer(Modifier.width(3.dp))
-                            Text("${loadedPlace.rating}", style = MaterialTheme.typography.labelLarge, color = Color.White)
+                            Text("${place.rating}", style = MaterialTheme.typography.labelLarge, color = Color.White)
                         }
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Filled.Schedule, null, tint = Color.White.copy(alpha = 0.8f), modifier = Modifier.size(14.dp))
                             Spacer(Modifier.width(3.dp))
-                            Text(loadedPlace.openHours, style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.8f))
+                            Text(place.openHours, style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.8f))
                         }
                     }
                 }
@@ -121,7 +217,7 @@ fun PlaceDetailScreen(placeId: String, onBack: () -> Unit) {
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    CategoryBadge(icon = loadedPlace.category.icon, tint = loadedPlace.category.tint, size = 40)
+                    CategoryBadge(icon = place.category.icon, tint = place.category.tint, size = 40)
                     Column {
                         Text(
                             "About this place",
@@ -129,14 +225,14 @@ fun PlaceDetailScreen(placeId: String, onBack: () -> Unit) {
                             color = MaterialTheme.colorScheme.onSurface,
                         )
                         Text(
-                            loadedPlace.category.label,
+                            place.category.label,
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 }
                 Text(
-                    loadedPlace.description,
+                    place.description,
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     lineHeight = MaterialTheme.typography.bodyLarge.lineHeight,
@@ -146,6 +242,152 @@ fun PlaceDetailScreen(placeId: String, onBack: () -> Unit) {
                     GlassButton(label = "Bookmark", icon = Icons.Filled.FavoriteBorder, onClick = {})
                     GlassButton(label = "AI Tips", icon = Icons.Filled.AutoAwesome, onClick = {})
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DestinationDetailContent(
+    destination: Destination,
+    relatedPlaces: List<Place>,
+    onBack: () -> Unit,
+    onPlanTrip: ((String) -> Unit)? = null,
+) {
+    val coverColors = if (destination.cover.isNotEmpty()) destination.cover.map { Color(it) } else CoverOcean
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(bottom = 60.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        item {
+            Box {
+                GradientCover(
+                    gradient = coverColors,
+                    modifier = Modifier.fillMaxWidth().height(250.dp),
+                )
+                GlassIconButton(
+                    Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Back",
+                    onClick = onBack,
+                    modifier = Modifier
+                        .statusBarsPadding()
+                        .padding(start = 16.dp, top = 10.dp),
+                )
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        GlassChip(label = destination.country, tint = Color.White)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Filled.Star, null, tint = AuroraGold, modifier = Modifier.size(15.dp))
+                            Spacer(Modifier.width(3.dp))
+                            Text("${destination.rating}", style = MaterialTheme.typography.labelLarge, color = Color.White)
+                        }
+                    }
+                    Text(
+                        destination.name,
+                        style = MaterialTheme.typography.displaySmall.copy(fontWeight = FontWeight.Bold),
+                        color = Color.White,
+                    )
+                    Text(
+                        destination.tagline,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.White.copy(alpha = 0.9f),
+                    )
+                }
+            }
+        }
+
+        // Tags Pill Row
+        if (destination.tags.isNotEmpty()) {
+            item {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    destination.tags.forEach { tag ->
+                        GlassChip(label = tag, tint = AuroraTeal)
+                    }
+                }
+            }
+        }
+
+        // Top Attractions / Places in Destination
+        if (relatedPlaces.isNotEmpty()) {
+            item {
+                Column(
+                    modifier = Modifier.padding(horizontal = 20.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Text(
+                        "Top Sights & Experiences",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+            }
+
+            items(relatedPlaces) { itemPlace ->
+                GlassCard(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp),
+                    contentPadding = 12.dp,
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        CategoryBadge(icon = itemPlace.category.icon, tint = itemPlace.category.tint, size = 36)
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                itemPlace.name,
+                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                            Text(
+                                itemPlace.description,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 2,
+                            )
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Filled.Star, null, tint = AuroraGold, modifier = Modifier.size(13.dp))
+                            Spacer(Modifier.width(2.dp))
+                            Text("${itemPlace.rating}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurface)
+                        }
+                    }
+                }
+            }
+        }
+
+        // Action Buttons
+        item {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                GlassButton(
+                    label = "Plan a trip to ${destination.name}",
+                    icon = Icons.Filled.Add,
+                    onClick = { onPlanTrip?.invoke(destination.name) },
+                    accent = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
             }
         }
     }

@@ -250,7 +250,13 @@ private fun TravelNavHost(navController: NavHostController) {
         }
         composable(Routes.PlaceDetail) { entry ->
             val placeId = entry.stringArg("placeId").orEmpty()
-            PlaceDetailScreen(placeId = placeId, onBack = { navController.popBackStack() })
+            PlaceDetailScreen(
+                placeId = placeId,
+                onBack = { navController.popBackStack() },
+                onNavigateToPlanTrip = { _ ->
+                    navController.navigate(Routes.CreateTrip)
+                },
+            )
         }
         composable(Routes.GroupTrip) { entry ->
             val tripId = entry.stringArg("tripId").orEmpty()

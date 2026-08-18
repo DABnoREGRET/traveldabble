@@ -2,6 +2,7 @@ package com.dabber.traveldabble.data
 
 import com.dabber.traveldabble.model.Budget
 import com.dabber.traveldabble.model.Destination
+import com.dabber.traveldabble.model.Place
 import com.dabber.traveldabble.model.Trip
 import com.dabber.traveldabble.model.TripMember
 import com.dabber.traveldabble.ui.mock.MockData
@@ -116,37 +117,33 @@ object Repository {
     }
 
     suspend fun getDestinations(): List<Destination> {
-        if (AuthState.isLoggedIn && !AuthState.isGuestMode) {
-            val remote = try {
-                ApiClient.getDestinations()
-            } catch (_: Exception) {
-                emptyList()
-            }
-            if (remote.isNotEmpty()) return remote
-        }
-
-        return if (SettingsState.demoMode) {
-            MockData.destinations.map { it.toDomain() }
-        } else {
+        val remote = try {
+            ApiClient.getDestinations()
+        } catch (_: Exception) {
             emptyList()
         }
+        if (remote.isNotEmpty()) return remote
+
+        return MockData.destinations.map { it.toDomain() }
     }
 
     suspend fun getDestination(id: String): Destination? {
-        if (AuthState.isLoggedIn && !AuthState.isGuestMode) {
-            val remote = try {
-                ApiClient.getDestination(id)
-            } catch (_: Exception) {
-                null
-            }
-            if (remote != null) return remote
+        val remote = try {
+            ApiClient.getDestination(id)
+        } catch (_: Exception) {
+            null
         }
+        if (remote != null) return remote
 
-        if (SettingsState.demoMode) {
-            return MockData.destinations.firstOrNull { it.id == id }?.toDomain()
-        }
+        return MockData.destinations.firstOrNull { it.id == id }?.toDomain()
+    }
 
-        return null
+    suspend fun getPlace(id: String): Place? {
+        val allTripsPlaces = getTrips().flatMap { it.days }.flatMap { it.activities }.map { it.place }
+        allTripsPlaces.firstOrNull { it.id == id }?.let { return it }
+
+        val allMockPlaces = MockData.hanoiPlaces + MockData.centralPlaces + MockData.haGiangPlaces + MockData.saigonPlaces + MockData.ninhBinhPlaces
+        return allMockPlaces.firstOrNull { it.id == id }
     }
 
     // Group Trip methods

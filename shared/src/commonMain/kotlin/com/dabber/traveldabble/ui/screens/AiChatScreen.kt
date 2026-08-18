@@ -108,7 +108,7 @@ fun AiChatScreen(
     var showApiKeyPrompt by remember { mutableStateOf(false) }
     var apiKeyInput by remember { mutableStateOf("") }
     var aiStatus by remember { mutableStateOf<String?>(null) }
-    var availableModels by remember { mutableStateOf<List<AiModelOption>>(emptyList()) }
+    var availableModels by remember { mutableStateOf<List<AiModelOption>>(AiService.DEFAULT_AI_MODELS) }
 
     // Tool execution tracking
     val toolEvents = remember { mutableStateListOf<ToolEventDisplay>() }

@@ -67,7 +67,7 @@ fun AccountSettingsScreen(onBack: () -> Unit) {
     var aiKeyInput by remember { mutableStateOf(SettingsState.openRouterApiKey ?: "") }
     var selectedAiModel by remember { mutableStateOf(SettingsState.selectedAiModel) }
     var showModelDropdown by remember { mutableStateOf(false) }
-    var availableModels by remember { mutableStateOf<List<AiModelOption>>(emptyList()) }
+    var availableModels by remember { mutableStateOf<List<AiModelOption>>(AiService.DEFAULT_AI_MODELS) }
 
     LaunchedEffect(Unit) {
         val liveModels = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {

@@ -173,11 +173,53 @@ fun Route.AiRoutes() {
 
             val fallback = listOf(
                 buildJsonObject {
-                    put("id", JsonPrimitive(DEFAULT_MODEL))
+                    put("id", JsonPrimitive("google/gemma-4-26b-a4b-it:free"))
                     put("name", JsonPrimitive("Gemma 4 26B (Free)"))
-                    put("description", JsonPrimitive("Default free OpenRouter model"))
+                    put("description", JsonPrimitive("Google lightweight chat & tool calling model"))
                     put("is_free", JsonPrimitive(true))
-                }
+                },
+                buildJsonObject {
+                    put("id", JsonPrimitive("meta-llama/llama-3.3-70b-instruct:free"))
+                    put("name", JsonPrimitive("Llama 3.3 70B (Free)"))
+                    put("description", JsonPrimitive("Meta open flagship conversational model"))
+                    put("is_free", JsonPrimitive(true))
+                },
+                buildJsonObject {
+                    put("id", JsonPrimitive("mistralai/mistral-small-24b-instruct-2501:free"))
+                    put("name", JsonPrimitive("Mistral Small 24B (Free)"))
+                    put("description", JsonPrimitive("Fast and capable French AI model"))
+                    put("is_free", JsonPrimitive(true))
+                },
+                buildJsonObject {
+                    put("id", JsonPrimitive("deepseek/deepseek-r1:free"))
+                    put("name", JsonPrimitive("DeepSeek R1 (Free)"))
+                    put("description", JsonPrimitive("State-of-the-art open reasoning model"))
+                    put("is_free", JsonPrimitive(true))
+                },
+                buildJsonObject {
+                    put("id", JsonPrimitive("qwen/qwen-2.5-72b-instruct:free"))
+                    put("name", JsonPrimitive("Qwen 2.5 72B (Free)"))
+                    put("description", JsonPrimitive("Multilingual travel planning model"))
+                    put("is_free", JsonPrimitive(true))
+                },
+                buildJsonObject {
+                    put("id", JsonPrimitive("anthropic/claude-3.5-sonnet"))
+                    put("name", JsonPrimitive("Claude 3.5 Sonnet"))
+                    put("description", JsonPrimitive("Industry-leading intelligence and tool calling"))
+                    put("is_free", JsonPrimitive(false))
+                },
+                buildJsonObject {
+                    put("id", JsonPrimitive("openai/gpt-4o"))
+                    put("name", JsonPrimitive("GPT-4o"))
+                    put("description", JsonPrimitive("Flagship OpenAI multimodal intelligence"))
+                    put("is_free", JsonPrimitive(false))
+                },
+                buildJsonObject {
+                    put("id", JsonPrimitive("google/gemini-2.0-flash-001"))
+                    put("name", JsonPrimitive("Gemini 2.0 Flash"))
+                    put("description", JsonPrimitive("Ultra-fast Next-Gen Google model"))
+                    put("is_free", JsonPrimitive(false))
+                },
             )
 
             call.respond(buildJsonObject {
