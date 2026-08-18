@@ -186,7 +186,8 @@ private fun TravelNavHost(navController: NavHostController) {
                         "profile" -> navController.navigate(Routes.Profile) {
                             popUpTo(Routes.Home)
                         }
-                        "ai_chat" -> { /* already here */ }
+                        "ai_settings" -> navController.navigate(Routes.SettingsAccount)
+                        "account" -> navController.navigate(Routes.SettingsAccount)
                         "trip_detail" -> {
                             tripId?.let { navController.navigate(Routes.tripDetail(it)) }
                         }

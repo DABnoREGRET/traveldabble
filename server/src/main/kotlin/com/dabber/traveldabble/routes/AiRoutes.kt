@@ -109,16 +109,22 @@ fun Route.AiRoutes() {
 
                 val allTools = buildToolList(clientToolDefs)
 
-                try {
-                    val messages = kotlinx.serialization.json.JsonArray(
-                        request.messages.map { msg ->
-                            buildJsonObject {
-                                put("role", JsonPrimitive(msg.role))
-                                put("content", JsonPrimitive(msg.content))
-                            }
+                val cleanMessages = request.messages
+                    .filter { it.content.isNotBlank() }
+                    .map { msg ->
+                        buildJsonObject {
+                            put("role", JsonPrimitive(msg.role.ifBlank { "user" }))
+                            put("content", JsonPrimitive(msg.content.trim()))
                         }
-                    )
+                    }
 
+                if (cleanMessages.isEmpty()) {
+                    call.respond(HttpStatusCode.BadRequest, ApiError("Message content cannot be empty"))
+                    return@post
+                }
+
+                try {
+                    val messages = kotlinx.serialization.json.JsonArray(cleanMessages)
                     val result = runToolLoop(apiKey, model, messages, allTools, byok)
                     call.respond(result)
                 } catch (e: Exception) {
@@ -251,8 +257,9 @@ private suspend fun runToolLoop(
     tools: kotlinx.serialization.json.JsonArray?,
     byok: Boolean = false,
 ): JsonObject {
-    var messages = initialMessages.toMutableList()
+    val messages = initialMessages.toMutableList()
     var round = 0
+    var activeTools = tools
 
     while (round < MAX_TOOL_ROUNDS) {
         round++
@@ -262,7 +269,9 @@ private suspend fun runToolLoop(
             put("messages", kotlinx.serialization.json.JsonArray(messages))
             put("max_tokens", JsonPrimitive(2048))
             put("temperature", JsonPrimitive(0.7))
-            tools?.let { put("tools", it) }
+            if (activeTools != null && activeTools.isNotEmpty()) {
+                put("tools", activeTools)
+            }
         }
 
         val openRouterResponse = httpClient.clientPost(OPENROUTER_URL) {
@@ -276,17 +285,52 @@ private suspend fun runToolLoop(
         val responseText = openRouterResponse.bodyAsText()
 
         if (openRouterResponse.status.value !in 200..299) {
+            // If tools were provided and caused a 400/422 (e.g. model does not support tools),
+            // automatically retry immediately without tools!
+            if (activeTools != null && (openRouterResponse.status.value == 400 || openRouterResponse.status.value == 422)) {
+                activeTools = null
+                continue
+            }
+
+            val errorMsg = try {
+                val errJson = Json.parseToJsonElement(responseText).jsonObject
+                errJson["error"]?.jsonObject?.get("message")?.jsonPrimitive?.contentOrNull
+                    ?: errJson["message"]?.jsonPrimitive?.contentOrNull
+                    ?: "AI service error (${openRouterResponse.status.value})"
+            } catch (_: Exception) {
+                "AI service error: ${openRouterResponse.status}"
+            }
+
             return buildJsonObject {
-                put("content", JsonPrimitive("AI service error: ${openRouterResponse.status}"))
+                put("content", JsonPrimitive(errorMsg))
                 put("model", JsonPrimitive(model))
                 put("byok", JsonPrimitive(byok))
             }
         }
 
-        val responseJson = Json.parseToJsonElement(responseText).jsonObject
+        val responseJson = try {
+            Json.parseToJsonElement(responseText).jsonObject
+        } catch (_: Exception) {
+            return buildJsonObject {
+                put("content", JsonPrimitive("Received unparseable AI response."))
+                put("model", JsonPrimitive(model))
+                put("byok", JsonPrimitive(byok))
+            }
+        }
+
         val choices = responseJson["choices"]?.jsonArray
-        val choice = choices?.firstOrNull()?.jsonObject ?: break
-        val message = choice["message"]?.jsonObject ?: break
+        val choice = choices?.firstOrNull()?.jsonObject
+        val message = choice?.get("message")?.jsonObject
+
+        if (message == null) {
+            val fallbackContent = responseJson["error"]?.jsonObject?.get("message")?.jsonPrimitive?.contentOrNull
+                ?: "No response message returned from AI service."
+            return buildJsonObject {
+                put("content", JsonPrimitive(fallbackContent))
+                put("model", JsonPrimitive(model))
+                put("byok", JsonPrimitive(byok))
+            }
+        }
 
         val content = message["content"]?.jsonPrimitive?.contentOrNull
         val toolCalls = message["tool_calls"]?.jsonArray
@@ -345,9 +389,9 @@ private suspend fun runToolLoop(
     }
 
     return buildJsonObject {
-        put("content", JsonPrimitive("I processed your request but ran into too many steps. Please try again."))
+        put("content", JsonPrimitive("I processed your request but reached step limit. Please try again."))
         put("model", JsonPrimitive(model))
-        put("byok", JsonPrimitive(true))
+        put("byok", JsonPrimitive(byok))
     }
 }
 

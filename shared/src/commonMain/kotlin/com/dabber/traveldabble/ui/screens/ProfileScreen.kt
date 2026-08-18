@@ -219,8 +219,14 @@ fun ProfileScreen(
                 )
                 SettingsRow(
                     icon = Icons.Filled.Person,
-                    title = "Account & AI Settings",
-                    subtitle = if (isGuest) "Local-first storage • Server & BYOK AI" else (user?.displayName ?: "Signed in"),
+                    title = "Account & Cloud Sync",
+                    subtitle = if (isGuest) "Local-first storage • Guest Mode" else (user?.displayName ?: "Signed in"),
+                    onClick = onNavigateToAccount,
+                )
+                SettingsRow(
+                    icon = Icons.Filled.AutoAwesome,
+                    title = "AI Copilot & Models",
+                    subtitle = "OpenRouter • ${SettingsState.selectedAiModel.substringAfterLast("/").replace(":free", " (Free)").replace("-", " ")}",
                     onClick = onNavigateToAccount,
                 )
                 SettingsRow(
