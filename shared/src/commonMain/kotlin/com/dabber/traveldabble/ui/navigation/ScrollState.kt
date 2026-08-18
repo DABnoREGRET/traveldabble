@@ -46,9 +46,13 @@ object ScrollState {
         }
     }
 
-    fun reset() {
+    fun show() {
         isBarVisible = true
         lastScrollOffset = 0
         lastScrollIndex = 0
+    }
+
+    fun reset() {
+        show()
     }
 }

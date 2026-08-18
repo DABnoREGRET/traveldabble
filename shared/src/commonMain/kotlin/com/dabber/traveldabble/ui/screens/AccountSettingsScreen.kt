@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.dp
 import com.dabber.traveldabble.data.AiModelOption
 import com.dabber.traveldabble.data.AiService
 import com.dabber.traveldabble.data.ApiClient
+import com.dabber.traveldabble.data.sanitizeApiKey
 import com.dabber.traveldabble.data.AuthState
 import com.dabber.traveldabble.data.DEFAULT_BASE_URL
 import com.dabber.traveldabble.data.SettingsState
@@ -423,7 +424,8 @@ fun AccountSettingsScreen(onBack: () -> Unit) {
             confirmButton = {
                 Button(
                     onClick = {
-                        SettingsState.updateOpenRouterApiKey(aiKeyInput.takeIf { it.isNotBlank() })
+                        val cleanKey = sanitizeApiKey(aiKeyInput)
+                        SettingsState.updateOpenRouterApiKey(cleanKey)
                         SettingsState.updateSelectedAiModel(selectedAiModel)
                         showAiDialog = false
                     },

@@ -108,7 +108,7 @@ object AuthState {
     }
 
     fun updateOpenRouterApiKey(key: String?) {
-        openRouterApiKey = key?.takeIf { it.isNotBlank() }
+        openRouterApiKey = sanitizeApiKey(key)
     }
 
     fun updateSelectedAiModel(model: String) {

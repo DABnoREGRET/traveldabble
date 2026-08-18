@@ -87,8 +87,8 @@ fun Route.AiRoutes() {
                     return@post
                 }
 
-                val byokKey = call.request.headers["X-Api-Key"]?.takeIf { it.isNotBlank() }
-                val apiKey = byokKey ?: SERVER_OPENROUTER_KEY
+                val byokKey = sanitizeApiKey(call.request.headers["X-Api-Key"])
+                val apiKey = byokKey ?: sanitizeApiKey(SERVER_OPENROUTER_KEY)
 
                 if (apiKey.isNullOrBlank()) {
                     call.respond(
@@ -237,6 +237,18 @@ fun Route.AiRoutes() {
         }
 
         get("/health") {
+            val hasServerKey = !SERVER_OPENROUTER_KEY.isNullOrBlank()
+            call.respond(buildJsonObject {
+                put("status", JsonPrimitive("ok"))
+                put("server_key_configured", JsonPrimitive(hasServerKey))
+                put("message", JsonPrimitive(
+                    if (hasServerKey) "Server AI key is configured"
+                    else "No server key — users must provide their own API key"
+                ))
+            })
+        }
+
+        post("/health") {
             val hasServerKey = !SERVER_OPENROUTER_KEY.isNullOrBlank()
             call.respond(buildJsonObject {
                 put("status", JsonPrimitive("ok"))
@@ -399,4 +411,23 @@ private fun buildToolList(clientToolDefs: kotlinx.serialization.json.JsonArray?)
     val serverTools = AiToolDefinitions.buildAllTools()
     if (clientToolDefs.isNullOrEmpty()) return serverTools
     return kotlinx.serialization.json.JsonArray(serverTools + clientToolDefs)
+}
+
+private fun sanitizeApiKey(key: String?): String? {
+    if (key.isNullOrBlank()) return null
+    var cleaned = key.trim()
+    while ((cleaned.startsWith("\"") && cleaned.endsWith("\"")) || (cleaned.startsWith("'") && cleaned.endsWith("'"))) {
+        if (cleaned.length < 2) break
+        cleaned = cleaned.substring(1, cleaned.length - 1).trim()
+    }
+    cleaned = cleaned
+        .removePrefix("Bearer ")
+        .removePrefix("bearer ")
+        .removePrefix("APIKEY=")
+        .removePrefix("APIKEY:")
+        .removePrefix("API_KEY=")
+        .removePrefix("API_KEY:")
+        .trim()
+        .filter { it.code in 33..126 && it != '"' && it != '\'' && it != '\\' }
+    return cleaned.takeIf { it.isNotBlank() }
 }

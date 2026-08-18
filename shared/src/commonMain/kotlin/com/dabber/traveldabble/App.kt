@@ -70,16 +70,17 @@ fun App() {
                     currentRoute = currentRoute,
                     onTabSelected = { route ->
                         if (currentRoute == route) return@GlassBottomBar
+                        ScrollState.show()
                         navController.navigate(route) {
                             popUpTo(navController.graph.findStartDestination().id) {
-                                saveState = true
+                                saveState = false
                             }
                             launchSingleTop = true
                             restoreState = true
                         }
                     },
                     modifier = Modifier.align(Alignment.BottomCenter),
-                    visible = ScrollState.isBarVisible,
+                    visible = ScrollState.isBarVisible || currentRoute == Routes.Ai,
                 )
             }
         }
@@ -205,20 +206,38 @@ private fun TravelNavHost(navController: NavHostController) {
                 tripId = "general",
                 onNavigate = { screen, tripId ->
                     when (screen) {
-                        "home" -> navController.navigate(Routes.Home) {
-                            popUpTo(Routes.Home) { inclusive = true }
+                        "home" -> {
+                            ScrollState.show()
+                            navController.navigate(Routes.Home) {
+                                popUpTo(navController.graph.findStartDestination().id) {
+                                    inclusive = false
+                                }
+                                launchSingleTop = true
+                            }
                         }
-                        "trips" -> navController.navigate(Routes.Trips) {
-                            popUpTo(Routes.Home)
+                        "trips" -> {
+                            ScrollState.show()
+                            navController.navigate(Routes.Trips) {
+                                popUpTo(Routes.Home)
+                            }
                         }
-                        "map" -> navController.navigate(Routes.Map) {
-                            popUpTo(Routes.Home)
+                        "map" -> {
+                            ScrollState.show()
+                            navController.navigate(Routes.Map) {
+                                popUpTo(Routes.Home)
+                            }
                         }
-                        "explore" -> navController.navigate(Routes.Explore) {
-                            popUpTo(Routes.Home)
+                        "explore" -> {
+                            ScrollState.show()
+                            navController.navigate(Routes.Explore) {
+                                popUpTo(Routes.Home)
+                            }
                         }
-                        "profile" -> navController.navigate(Routes.Profile) {
-                            popUpTo(Routes.Home)
+                        "profile" -> {
+                            ScrollState.show()
+                            navController.navigate(Routes.Profile) {
+                                popUpTo(Routes.Home)
+                            }
                         }
                         "ai_settings" -> navController.navigate(Routes.SettingsAccount)
                         "account" -> navController.navigate(Routes.SettingsAccount)

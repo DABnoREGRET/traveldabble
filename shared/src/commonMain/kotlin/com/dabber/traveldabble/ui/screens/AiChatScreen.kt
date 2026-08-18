@@ -29,6 +29,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
@@ -38,6 +39,7 @@ import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
+import com.dabber.traveldabble.ui.navigation.ScrollState
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -138,6 +140,7 @@ fun AiChatScreen(
 
     // Check AI health and fetch live models on mount
     LaunchedEffect(Unit) {
+        ScrollState.show()
         val health = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             AiService.checkHealth()
         }
@@ -177,8 +180,15 @@ fun AiChatScreen(
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
+            // Back to Home Button
+            GlassIconButton(
+                icon = androidx.compose.material.icons.Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = "Back to Home",
+                onClick = { onNavigate("home", null) },
+            )
+
             // Conversation Drawer Toggle Button
             Box(
                 modifier = Modifier
@@ -189,7 +199,7 @@ fun AiChatScreen(
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
-                    Icons.Filled.Forum,
+                    androidx.compose.material.icons.Icons.Filled.Forum,
                     contentDescription = "Conversations",
                     tint = AuroraTeal,
                     modifier = Modifier.size(20.dp),

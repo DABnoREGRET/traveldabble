@@ -206,9 +206,10 @@ object SettingsState {
     }
 
     fun updateOpenRouterApiKey(key: String?) {
-        preferences = preferences.copy(openRouterApiKey = key?.takeIf { it.isNotBlank() })
+        val sanitized = sanitizeApiKey(key)
+        preferences = preferences.copy(openRouterApiKey = sanitized)
         savePreferences()
-        AuthState.updateOpenRouterApiKey(key)
+        AuthState.updateOpenRouterApiKey(sanitized)
     }
 
     fun updateSelectedAiModel(model: String) {
@@ -282,3 +283,22 @@ data class AiModelOption(
     val description: String = "",
     val isFree: Boolean = false,
 )
+
+fun sanitizeApiKey(key: String?): String? {
+    if (key.isNullOrBlank()) return null
+    var cleaned = key.trim()
+    while ((cleaned.startsWith("\"") && cleaned.endsWith("\"")) || (cleaned.startsWith("'") && cleaned.endsWith("'"))) {
+        if (cleaned.length < 2) break
+        cleaned = cleaned.substring(1, cleaned.length - 1).trim()
+    }
+    cleaned = cleaned
+        .removePrefix("Bearer ")
+        .removePrefix("bearer ")
+        .removePrefix("APIKEY=")
+        .removePrefix("APIKEY:")
+        .removePrefix("API_KEY=")
+        .removePrefix("API_KEY:")
+        .trim()
+        .filter { it.code in 33..126 && it != '"' && it != '\'' && it != '\\' }
+    return cleaned.takeIf { it.isNotBlank() }
+}
