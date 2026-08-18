@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.AlertDialog
@@ -42,13 +43,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import com.dabber.traveldabble.data.Repository
+import com.dabber.traveldabble.model.Expense
 import com.dabber.traveldabble.ui.components.GlassButton
 import com.dabber.traveldabble.ui.components.GlassCard
 import com.dabber.traveldabble.ui.components.GlassChip
 import com.dabber.traveldabble.ui.components.GlassIconButton
 import com.dabber.traveldabble.ui.components.ProgressTrack
 import com.dabber.traveldabble.ui.glass.GlassIntensity
-import com.dabber.traveldabble.model.Expense
 import com.dabber.traveldabble.ui.mock.Trip
 import com.dabber.traveldabble.ui.mock.toUi
 import com.dabber.traveldabble.ui.theme.AuroraTeal
@@ -70,9 +71,16 @@ fun BudgetScreen(tripId: String, onBack: () -> Unit) {
     var expenseTitle by remember { mutableStateOf("") }
     var expenseAmount by remember { mutableStateOf("") }
     var expenseCategory by remember { mutableStateOf("Food") }
+    var expenseDate by remember { mutableStateOf("Today") }
     var budgetTargetInput by remember { mutableStateOf("") }
     var expenseToDelete by remember { mutableStateOf<Expense?>(null) }
     val scope = rememberCoroutineScope()
+
+    fun loadTripData() {
+        scope.launch {
+            trip = Repository.getTrip(tripId)?.toUi()
+        }
+    }
 
     LaunchedEffect(tripId) {
         trip = Repository.getTrip(tripId)?.toUi()
@@ -92,6 +100,23 @@ fun BudgetScreen(tripId: String, onBack: () -> Unit) {
     }
 
     val budget = loadedTrip.budget
+    val totalSpent = budget.spent
+
+    val displayCategories = remember(budget) {
+        if (budget.categories.isNotEmpty()) {
+            budget.categories
+        } else if (budget.expenses.isNotEmpty()) {
+            budget.expenses.groupBy { it.category }
+                .map { (cat, exps) -> cat to exps.sumOf { it.amount } }
+        } else {
+            listOf(
+                "Lodging" to budget.total * 0.4,
+                "Food" to budget.total * 0.25,
+                "Transport" to budget.total * 0.2,
+                "Activities" to budget.total * 0.15
+            )
+        }
+    }
 
     if (showEditBudgetDialog) {
         AlertDialog(
@@ -121,7 +146,7 @@ fun BudgetScreen(tripId: String, onBack: () -> Unit) {
                         if (newTarget > 0.0) {
                             scope.launch {
                                 Repository.updateTripBudget(tripId, newTarget)
-                                trip = Repository.getTrip(tripId)?.toUi()
+                                loadTripData()
                             }
                             showEditBudgetDialog = false
                         }
@@ -155,7 +180,7 @@ fun BudgetScreen(tripId: String, onBack: () -> Unit) {
                     onClick = {
                         scope.launch {
                             Repository.removeExpenseFromTrip(tripId, exp.id)
-                            trip = Repository.getTrip(tripId)?.toUi()
+                            loadTripData()
                             expenseToDelete = null
                         }
                     },
@@ -192,6 +217,14 @@ fun BudgetScreen(tripId: String, onBack: () -> Unit) {
                         onValueChange = { expenseAmount = it },
                         label = { Text("Amount (USD)") },
                         placeholder = { Text("25.0") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    OutlinedTextField(
+                        value = expenseDate,
+                        onValueChange = { expenseDate = it },
+                        label = { Text("Date") },
+                        placeholder = { Text("e.g. Today or Oct 15") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                     )
@@ -233,11 +266,13 @@ fun BudgetScreen(tripId: String, onBack: () -> Unit) {
                                     title = expenseTitle.trim(),
                                     category = expenseCategory,
                                     amount = amount,
+                                    date = expenseDate.trim().ifBlank { "Today" },
                                 )
-                                trip = Repository.getTrip(tripId)?.toUi()
+                                loadTripData()
                             }
                             expenseTitle = ""
                             expenseAmount = ""
+                            expenseDate = "Today"
                             showAddExpenseDialog = false
                         }
                     }
@@ -257,9 +292,10 @@ fun BudgetScreen(tripId: String, onBack: () -> Unit) {
         modifier = Modifier
             .fillMaxSize()
             .statusBarsPadding(),
-        contentPadding = PaddingValues(bottom = 40.dp),
+        contentPadding = PaddingValues(bottom = 60.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
+        // Header
         item {
             Row(
                 modifier = Modifier
@@ -271,7 +307,7 @@ fun BudgetScreen(tripId: String, onBack: () -> Unit) {
                 GlassIconButton(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", onClick = onBack)
                 Column {
                     Text(
-                        "Budget",
+                        "Budget & Expenses",
                         style = MaterialTheme.typography.headlineMedium,
                         color = MaterialTheme.colorScheme.onSurface,
                     )
@@ -283,6 +319,8 @@ fun BudgetScreen(tripId: String, onBack: () -> Unit) {
                 }
             }
         }
+
+        // Summary Card
         item {
             GlassCard(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
@@ -300,7 +338,7 @@ fun BudgetScreen(tripId: String, onBack: () -> Unit) {
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         Text(
-                            "${budget.spent.toInt()} USD",
+                            "${totalSpent.toInt()} USD",
                             style = MaterialTheme.typography.headlineLarge,
                             color = MaterialTheme.colorScheme.primary,
                         )
@@ -333,16 +371,29 @@ fun BudgetScreen(tripId: String, onBack: () -> Unit) {
                     }
                 }
                 Spacer(Modifier.height(14.dp))
-                val fraction = if (budget.total > 0) (budget.spent / budget.total).toFloat().coerceIn(0f, 1f) else 0f
+                val fraction = if (budget.total > 0) (totalSpent / budget.total).toFloat().coerceIn(0f, 1f) else 0f
                 ProgressTrack(fraction = fraction, color = AuroraTeal)
                 Spacer(Modifier.height(6.dp))
-                Text(
-                    "${((fraction) * 100).toInt()}% of budget used",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        "${((fraction) * 100).toInt()}% of budget used",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    val remaining = (budget.total - totalSpent).coerceAtLeast(0.0)
+                    Text(
+                        "${remaining.toInt()} USD remaining",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
             }
         }
+
+        // Category Breakdown Section
         item {
             Text(
                 "Spending by Category",
@@ -351,8 +402,9 @@ fun BudgetScreen(tripId: String, onBack: () -> Unit) {
                 modifier = Modifier.padding(horizontal = 20.dp),
             )
         }
-        if (budget.categories.isNotEmpty()) {
-            val totalCat = budget.categories.sumOf { it.second }
+
+        if (displayCategories.isNotEmpty()) {
+            val totalCat = displayCategories.sumOf { it.second }
             item {
                 GlassCard(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
@@ -365,7 +417,7 @@ fun BudgetScreen(tripId: String, onBack: () -> Unit) {
                                 .height(12.dp)
                                 .clip(RoundedCornerShape(6.dp)),
                         ) {
-                            budget.categories.forEachIndexed { index, (_, amount) ->
+                            displayCategories.forEachIndexed { index, (_, amount) ->
                                 val weight = if (totalCat > 0) (amount / totalCat).toFloat().coerceAtLeast(0.01f) else 1f
                                 Box(
                                     modifier = Modifier
@@ -379,7 +431,7 @@ fun BudgetScreen(tripId: String, onBack: () -> Unit) {
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
                         ) {
-                            budget.categories.forEachIndexed { index, (cat, amount) ->
+                            displayCategories.forEachIndexed { index, (cat, amount) ->
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -400,8 +452,9 @@ fun BudgetScreen(tripId: String, onBack: () -> Unit) {
                     }
                 }
             }
-            items(budget.categories.size) { index ->
-                val (cat, amount) = budget.categories[index]
+
+            items(displayCategories.size) { index ->
+                val (cat, amount) = displayCategories[index]
                 GlassCard(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
                     intensity = GlassIntensity.Subtle,
@@ -432,26 +485,58 @@ fun BudgetScreen(tripId: String, onBack: () -> Unit) {
                 }
             }
         }
+
+        // Logged Expenses Header
         item {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 20.dp),
+                    .padding(horizontal = 20.dp, vertical = 4.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    "Logged Expenses",
+                    "Logged Expenses (${budget.expenses.size})",
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
                 GlassButton(
                     label = "+ Add",
+                    icon = Icons.Filled.Add,
                     onClick = { showAddExpenseDialog = true },
+                    accent = true,
                 )
             }
         }
-        if (budget.expenses.isNotEmpty()) {
+
+        // Empty state when no expenses logged
+        if (budget.expenses.isEmpty()) {
+            item {
+                GlassCard(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+                    intensity = GlassIntensity.Subtle,
+                    contentPadding = 20.dp,
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text(
+                            "No expenses logged yet",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Text(
+                            "Tap \"+ Add\" above to log meals, transit, lodging, or activities.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        )
+                    }
+                }
+            }
+        } else {
             items(budget.expenses) { expense ->
                 GlassCard(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),

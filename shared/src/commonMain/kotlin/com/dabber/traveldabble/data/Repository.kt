@@ -78,12 +78,11 @@ object Repository {
 
         // Guest / Local Mode: check if Demo Mode is enabled
         return if (SettingsState.demoMode) {
+            val userTripIds = localUserTrips.map { it.id }.toSet()
             val demoTrips = MockData.trips
                 .map { it.toDomain() }
-                .filterNot { it.id in deletedDemoTripIds }
-            val demoIds = demoTrips.map { it.id }.toSet()
-            val userTrips = localUserTrips.filterNot { it.id in demoIds }
-            userTrips + demoTrips
+                .filterNot { it.id in deletedDemoTripIds || it.id in userTripIds }
+            localUserTrips + demoTrips
         } else {
             localUserTrips.toList()
         }
@@ -256,16 +255,40 @@ object Repository {
             amount = amount,
             date = date,
         )
-        val updatedExpenses = trip.budget.expenses + newExpense
-        val updatedBudget = trip.budget.copy(expenses = updatedExpenses)
+        val updatedExpenses = listOf(newExpense) + trip.budget.expenses
+
+        val currentCategories = trip.budget.categories.toMap().toMutableMap()
+        val currentCatAmt = currentCategories[category] ?: 0.0
+        currentCategories[category] = currentCatAmt + amount
+
+        val updatedBudget = trip.budget.copy(
+            categories = currentCategories.toList(),
+            expenses = updatedExpenses,
+        )
         saveTrip(trip.copy(budget = updatedBudget))
         return true
     }
 
     suspend fun removeExpenseFromTrip(tripId: String, expenseId: String): Boolean {
         val trip = getTrip(tripId) ?: return false
+        val removedExp = trip.budget.expenses.firstOrNull { it.id == expenseId }
         val updatedExpenses = trip.budget.expenses.filterNot { it.id == expenseId }
-        val updatedBudget = trip.budget.copy(expenses = updatedExpenses)
+
+        val currentCategories = trip.budget.categories.toMap().toMutableMap()
+        if (removedExp != null) {
+            val currentCatAmt = currentCategories[removedExp.category] ?: 0.0
+            val newCatAmt = (currentCatAmt - removedExp.amount).coerceAtLeast(0.0)
+            if (newCatAmt > 0) {
+                currentCategories[removedExp.category] = newCatAmt
+            } else {
+                currentCategories.remove(removedExp.category)
+            }
+        }
+
+        val updatedBudget = trip.budget.copy(
+            categories = currentCategories.toList(),
+            expenses = updatedExpenses,
+        )
         saveTrip(trip.copy(budget = updatedBudget))
         return true
     }
