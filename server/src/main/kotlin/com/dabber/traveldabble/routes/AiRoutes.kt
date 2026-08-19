@@ -5,7 +5,8 @@ import com.dabber.traveldabble.mcp.McpTools
 import com.dabber.traveldabble.model.ApiError
 import com.dabber.traveldabble.util.rateLimited
 import io.ktor.client.HttpClient
-import io.ktor.client.engine.cio.CIO
+import io.ktor.client.engine.okhttp.OkHttp
+import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation as ClientContentNegotiation
 import io.ktor.client.request.get as clientGet
 import io.ktor.client.request.header
@@ -53,8 +54,18 @@ private const val OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completion
 private const val DEFAULT_MODEL = "google/gemma-4-26b-a4b-it:free"
 private const val MAX_TOOL_ROUNDS = 6
 
+private class AiProviderException(
+    val status: HttpStatusCode,
+    override val message: String,
+) : RuntimeException(message)
+
 private val httpClient by lazy {
-    HttpClient(CIO) {
+    HttpClient(OkHttp) {
+        install(HttpTimeout) {
+            requestTimeoutMillis = 4000
+            connectTimeoutMillis = 2500
+            socketTimeoutMillis = 4000
+        }
         install(ClientContentNegotiation) {
             clientJson(Json {
                 ignoreUnknownKeys = true
@@ -78,63 +89,28 @@ private val SERVER_EXECUTABLE_TOOLS = setOf(
 
 fun Route.AiRoutes() {
     route("/api/ai") {
-        rateLimited(limit = 20, windowMillis = 60_000) {
-            post("/chat") {
-                val request = try {
-                    call.receive<AiChatRequest>()
-                } catch (e: Exception) {
-                    call.respond(HttpStatusCode.BadRequest, ApiError("Invalid request body"))
-                    return@post
-                }
+        get("/health") {
+            val hasServerKey = !SERVER_OPENROUTER_KEY.isNullOrBlank()
+            call.respond(buildJsonObject {
+                put("status", JsonPrimitive("ok"))
+                put("server_key_configured", JsonPrimitive(hasServerKey))
+                put("message", JsonPrimitive(
+                    if (hasServerKey) "Server AI key is configured"
+                    else "No server key — users must provide their own API key"
+                ))
+            })
+        }
 
-                val byokKey = sanitizeApiKey(call.request.headers["X-Api-Key"])
-                val apiKey = byokKey ?: sanitizeApiKey(SERVER_OPENROUTER_KEY)
-
-                if (apiKey.isNullOrBlank()) {
-                    call.respond(
-                        HttpStatusCode.ServiceUnavailable,
-                        ApiError("No AI API key configured. Set OPENROUTER_API_KEY on the server or provide your own key in settings."),
-                    )
-                    return@post
-                }
-
-                val model = request.model ?: DEFAULT_MODEL
-                val byok = byokKey != null
-
-                val clientToolDefs = request.clientTools?.let {
-                    try {
-                        Json.parseToJsonElement(it).jsonArray
-                    } catch (_: Exception) { null }
-                }
-
-                val allTools = buildToolList(clientToolDefs)
-
-                val cleanMessages = request.messages
-                    .filter { it.content.isNotBlank() }
-                    .map { msg ->
-                        buildJsonObject {
-                            put("role", JsonPrimitive(msg.role.ifBlank { "user" }))
-                            put("content", JsonPrimitive(msg.content.trim()))
-                        }
-                    }
-
-                if (cleanMessages.isEmpty()) {
-                    call.respond(HttpStatusCode.BadRequest, ApiError("Message content cannot be empty"))
-                    return@post
-                }
-
-                try {
-                    val messages = kotlinx.serialization.json.JsonArray(cleanMessages)
-                    val result = runToolLoop(apiKey, model, messages, allTools, byok)
-                    call.respond(result)
-                } catch (e: Exception) {
-                    call.application.log.error("AI chat proxy failed", e)
-                    call.respond(
-                        HttpStatusCode.InternalServerError,
-                        ApiError("AI service temporarily unavailable: ${e.message}"),
-                    )
-                }
-            }
+        post("/health") {
+            val hasServerKey = !SERVER_OPENROUTER_KEY.isNullOrBlank()
+            call.respond(buildJsonObject {
+                put("status", JsonPrimitive("ok"))
+                put("server_key_configured", JsonPrimitive(hasServerKey))
+                put("message", JsonPrimitive(
+                    if (hasServerKey) "Server AI key is configured"
+                    else "No server key — users must provide their own API key"
+                ))
+            })
         }
 
         get("/models") {
@@ -236,28 +212,66 @@ fun Route.AiRoutes() {
             })
         }
 
-        get("/health") {
-            val hasServerKey = !SERVER_OPENROUTER_KEY.isNullOrBlank()
-            call.respond(buildJsonObject {
-                put("status", JsonPrimitive("ok"))
-                put("server_key_configured", JsonPrimitive(hasServerKey))
-                put("message", JsonPrimitive(
-                    if (hasServerKey) "Server AI key is configured"
-                    else "No server key — users must provide their own API key"
-                ))
-            })
-        }
+        rateLimited(limit = 20, windowMillis = 60_000) {
+            post("/chat") {
+                val request = try {
+                    call.receive<AiChatRequest>()
+                } catch (e: Exception) {
+                    call.respond(HttpStatusCode.BadRequest, ApiError("Invalid request body"))
+                    return@post
+                }
 
-        post("/health") {
-            val hasServerKey = !SERVER_OPENROUTER_KEY.isNullOrBlank()
-            call.respond(buildJsonObject {
-                put("status", JsonPrimitive("ok"))
-                put("server_key_configured", JsonPrimitive(hasServerKey))
-                put("message", JsonPrimitive(
-                    if (hasServerKey) "Server AI key is configured"
-                    else "No server key — users must provide their own API key"
-                ))
-            })
+                val byokKey = sanitizeApiKey(call.request.headers["X-Api-Key"])
+                val apiKey = byokKey ?: sanitizeApiKey(SERVER_OPENROUTER_KEY)
+
+                if (apiKey.isNullOrBlank()) {
+                    call.respond(
+                        HttpStatusCode.ServiceUnavailable,
+                        ApiError("No AI API key configured. Set OPENROUTER_API_KEY on the server or provide your own key in settings."),
+                    )
+                    return@post
+                }
+
+                val model = request.model ?: DEFAULT_MODEL
+                val byok = byokKey != null
+
+                val clientToolDefs = request.clientTools?.let {
+                    try {
+                        Json.parseToJsonElement(it).jsonArray
+                    } catch (_: Exception) { null }
+                }
+
+                val allTools = buildToolList(clientToolDefs)
+
+                val cleanMessages = request.messages
+                    .filter { it.content.isNotBlank() }
+                    .map { msg ->
+                        buildJsonObject {
+                            put("role", JsonPrimitive(msg.role.ifBlank { "user" }))
+                            put("content", JsonPrimitive(msg.content.trim()))
+                        }
+                    }
+
+                if (cleanMessages.isEmpty()) {
+                    call.respond(HttpStatusCode.BadRequest, ApiError("Message content cannot be empty"))
+                    return@post
+                }
+
+                try {
+                    val messages = kotlinx.serialization.json.JsonArray(cleanMessages)
+                    val result = runToolLoop(apiKey, model, messages, allTools, byok)
+                    call.respond(result)
+                } catch (e: AiProviderException) {
+                    call.application.log.error("AI provider rejected request: ${e.message}")
+                    call.respond(e.status, ApiError(e.message))
+                } catch (e: Exception) {
+                    call.application.log.error("AI chat proxy failed", e)
+                    call.respond(
+                        HttpStatusCode.InternalServerError,
+                        ApiError("AI service temporarily unavailable: ${e.message}"),
+                    )
+                }
+            }
         }
     }
 }
@@ -304,20 +318,10 @@ private suspend fun runToolLoop(
                 continue
             }
 
-            val errorMsg = try {
-                val errJson = Json.parseToJsonElement(responseText).jsonObject
-                errJson["error"]?.jsonObject?.get("message")?.jsonPrimitive?.contentOrNull
-                    ?: errJson["message"]?.jsonPrimitive?.contentOrNull
-                    ?: "AI service error (${openRouterResponse.status.value})"
-            } catch (_: Exception) {
-                "AI service error: ${openRouterResponse.status}"
-            }
-
-            return buildJsonObject {
-                put("content", JsonPrimitive(errorMsg))
-                put("model", JsonPrimitive(model))
-                put("byok", JsonPrimitive(byok))
-            }
+            throw AiProviderException(
+                status = openRouterResponse.status,
+                message = providerErrorMessage(responseText, openRouterResponse.status),
+            )
         }
 
         val responseJson = try {
@@ -335,10 +339,14 @@ private suspend fun runToolLoop(
         val message = choice?.get("message")?.jsonObject
 
         if (message == null) {
-            val fallbackContent = responseJson["error"]?.jsonObject?.get("message")?.jsonPrimitive?.contentOrNull
-                ?: "No response message returned from AI service."
+            if (responseJson["error"] != null) {
+                throw AiProviderException(
+                    status = HttpStatusCode.BadGateway,
+                    message = providerErrorMessage(responseText, HttpStatusCode.BadGateway),
+                )
+            }
             return buildJsonObject {
-                put("content", JsonPrimitive(fallbackContent))
+                put("content", JsonPrimitive("No response message returned from AI service."))
                 put("model", JsonPrimitive(model))
                 put("byok", JsonPrimitive(byok))
             }
@@ -411,6 +419,20 @@ private fun buildToolList(clientToolDefs: kotlinx.serialization.json.JsonArray?)
     val serverTools = AiToolDefinitions.buildAllTools()
     if (clientToolDefs.isNullOrEmpty()) return serverTools
     return kotlinx.serialization.json.JsonArray(serverTools + clientToolDefs)
+}
+
+private fun providerErrorMessage(responseText: String, status: HttpStatusCode): String {
+    val parsed = runCatching { Json.parseToJsonElement(responseText).jsonObject }.getOrNull()
+    val error = parsed?.get("error")
+    val message = when {
+        error is JsonObject -> error["message"]?.jsonPrimitive?.contentOrNull
+        error is JsonPrimitive -> error.contentOrNull
+        else -> null
+    } ?: parsed?.get("message")?.jsonPrimitive?.contentOrNull
+
+    return message?.takeIf { it.isNotBlank() }
+        ?: responseText.trim().takeIf { it.isNotBlank() && it.length <= 500 }
+        ?: "AI provider error (${status.value})"
 }
 
 private fun sanitizeApiKey(key: String?): String? {

@@ -20,6 +20,7 @@ expect fun TravelMap(
     modifier: Modifier = Modifier,
     tilt3d: Boolean = true,
     showPolylines: Boolean = true,
+    routePlaces: List<Place> = places,
     showUserLocation: Boolean = false,
     autoCenterOnLocation: Boolean = false,
     focusLocation: Pair<Double, Double>? = null,

@@ -62,6 +62,19 @@ object Repository {
         } catch (_: Throwable) {}
     }
 
+    private suspend fun ensureRemoteTripDays(trip: Trip): Trip {
+        if (!AuthState.isLoggedIn || AuthState.isGuestMode || trip.days.isNotEmpty()) return trip
+        val labels = listOf(
+            trip.startDate.ifBlank { "Day 1" },
+            "Day 2",
+            trip.endDate.ifBlank { "Day 3" },
+        )
+        val days = labels.mapIndexedNotNull { index, label ->
+            runCatching { ApiClient.addDayPlan(trip.id, index + 1, label) }.getOrNull()
+        }
+        return if (days.isNotEmpty()) trip.copy(days = days) else trip
+    }
+
     suspend fun getTrips(): List<Trip> {
         if (AuthState.isLoggedIn && !AuthState.isGuestMode) {
             val remote = try {
@@ -70,9 +83,10 @@ object Repository {
                 emptyList()
             }
             if (remote.isNotEmpty()) {
-                val remoteIds = remote.map { it.id }.toSet()
+                val remoteWithDays = remote.map { ensureRemoteTripDays(it) }
+                val remoteIds = remoteWithDays.map { it.id }.toSet()
                 val onlyLocal = localUserTrips.filterNot { it.id in remoteIds }
-                return remote + onlyLocal
+                return remoteWithDays + onlyLocal
             }
         }
 
@@ -98,7 +112,7 @@ object Repository {
             } catch (_: Exception) {
                 null
             }
-            if (remote != null) return remote
+            if (remote != null) return ensureRemoteTripDays(remote)
         }
 
         if (SettingsState.demoMode && id !in deletedDemoTripIds) {
@@ -128,6 +142,7 @@ object Repository {
             } catch (_: Exception) {
                 null
             }
+            remoteCreated = remoteCreated?.let { ensureRemoteTripDays(it) }
         }
 
         // Generate initial day structure
@@ -203,7 +218,15 @@ object Repository {
         note: String? = null,
     ): Boolean {
         val trip = getTrip(tripId) ?: return false
-        val newActivity = ActivityItem(
+        val day = trip.days.firstOrNull { it.dayNumber == dayNumber }
+        val remoteActivity = if (AuthState.isLoggedIn && !AuthState.isGuestMode && day?.id != null) {
+            runCatching {
+                ApiClient.addActivity(tripId, day.id, place, startTime, endTime, note)
+            }.getOrNull()
+        } else {
+            null
+        }
+        val newActivity = remoteActivity ?: ActivityItem(
             id = "act_${System.currentTimeMillis()}",
             place = place,
             startTime = startTime,
@@ -229,6 +252,9 @@ object Repository {
 
     suspend fun removeActivityFromTrip(tripId: String, dayNumber: Int, activityId: String): Boolean {
         val trip = getTrip(tripId) ?: return false
+        if (AuthState.isLoggedIn && !AuthState.isGuestMode) {
+            runCatching { ApiClient.removeActivity(tripId, activityId) }
+        }
         val updatedDays = trip.days.map { day ->
             if (day.dayNumber == dayNumber) {
                 day.copy(activities = day.activities.filterNot { it.id == activityId })
@@ -248,7 +274,12 @@ object Repository {
         date: String = "Today",
     ): Boolean {
         val trip = getTrip(tripId) ?: return false
-        val newExpense = Expense(
+        val remoteExpense = if (AuthState.isLoggedIn && !AuthState.isGuestMode) {
+            runCatching { ApiClient.addExpense(tripId, title, category, amount, date) }.getOrNull()
+        } else {
+            null
+        }
+        val newExpense = remoteExpense ?: Expense(
             id = "exp_${System.currentTimeMillis()}",
             title = title,
             category = category,
@@ -271,6 +302,9 @@ object Repository {
 
     suspend fun removeExpenseFromTrip(tripId: String, expenseId: String): Boolean {
         val trip = getTrip(tripId) ?: return false
+        if (AuthState.isLoggedIn && !AuthState.isGuestMode) {
+            runCatching { ApiClient.removeExpense(tripId, expenseId) }
+        }
         val removedExp = trip.budget.expenses.firstOrNull { it.id == expenseId }
         val updatedExpenses = trip.budget.expenses.filterNot { it.id == expenseId }
 

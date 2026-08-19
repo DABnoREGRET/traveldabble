@@ -3,7 +3,7 @@ package com.dabber.traveldabble.routing
 import com.dabber.traveldabble.model.Route
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
-import io.ktor.client.engine.cio.CIO
+import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.defaultRequest
 import io.ktor.client.request.get
@@ -16,7 +16,7 @@ class RoutingService {
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
 
     private val httpClient by lazy {
-        HttpClient(CIO) {
+        HttpClient(OkHttp) {
             install(ContentNegotiation) {
                 json(json)
             }

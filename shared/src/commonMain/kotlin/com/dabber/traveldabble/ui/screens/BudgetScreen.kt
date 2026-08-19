@@ -63,6 +63,11 @@ import kotlinx.coroutines.launch
 
 private val categoryColors = listOf(JadeGreen, MekongOrange, TempleGold, SilkViolet, LotusRed)
 
+private fun formatExpenseAmount(amount: Double): String {
+    val text = amount.toString()
+    return if (text.endsWith(".0")) text.dropLast(2) else text
+}
+
 @Composable
 fun BudgetScreen(tripId: String, onBack: () -> Unit) {
     var trip by remember { mutableStateOf<Trip?>(null) }
@@ -338,7 +343,7 @@ fun BudgetScreen(tripId: String, onBack: () -> Unit) {
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         Text(
-                            "${totalSpent.toInt()} USD",
+                            "${formatExpenseAmount(totalSpent)} USD",
                             style = MaterialTheme.typography.headlineLarge,
                             color = MaterialTheme.colorScheme.primary,
                         )
@@ -364,7 +369,7 @@ fun BudgetScreen(tripId: String, onBack: () -> Unit) {
                             )
                         }
                         Text(
-                            "${budget.total.toInt()} USD",
+                            "${formatExpenseAmount(budget.total)} USD",
                             style = MaterialTheme.typography.headlineLarge,
                             color = MaterialTheme.colorScheme.onSurface,
                         )
@@ -385,7 +390,7 @@ fun BudgetScreen(tripId: String, onBack: () -> Unit) {
                     )
                     val remaining = (budget.total - totalSpent).coerceAtLeast(0.0)
                     Text(
-                        "${remaining.toInt()} USD remaining",
+                        "${formatExpenseAmount(remaining)} USD remaining",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.primary,
                     )
@@ -496,12 +501,12 @@ fun BudgetScreen(tripId: String, onBack: () -> Unit) {
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    "Logged Expenses (${budget.expenses.size})",
+                    "Actual Logged Expenses (${budget.expenses.size})",
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
                 GlassButton(
-                    label = "+ Add",
+                    label = "Add",
                     icon = Icons.Filled.Add,
                     onClick = { showAddExpenseDialog = true },
                     accent = true,
@@ -523,12 +528,12 @@ fun BudgetScreen(tripId: String, onBack: () -> Unit) {
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         Text(
-                            "No expenses logged yet",
+                            "No actual expenses logged yet",
                             style = MaterialTheme.typography.titleSmall,
                             color = MaterialTheme.colorScheme.onSurface,
                         )
                         Text(
-                            "Tap \"+ Add\" above to log meals, transit, lodging, or activities.",
+                            "Tap \"Add\" above to log meals, transit, lodging, or activities.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
@@ -568,7 +573,7 @@ fun BudgetScreen(tripId: String, onBack: () -> Unit) {
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
                             Text(
-                                "${expense.amount.toInt()} USD",
+                                "${formatExpenseAmount(expense.amount)} USD",
                                 style = MaterialTheme.typography.titleSmall,
                                 color = MaterialTheme.colorScheme.primary,
                             )

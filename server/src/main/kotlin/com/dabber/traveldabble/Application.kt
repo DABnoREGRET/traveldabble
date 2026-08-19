@@ -46,9 +46,11 @@ fun main(args: Array<String>) {
 fun Application.module() {
     DatabaseFactory.init(environment.config)
 
-    install(Koin) {
-        slf4jLogger()
-        modules(serverModule)
+    if (org.koin.core.context.GlobalContext.getOrNull() == null) {
+        install(Koin) {
+            slf4jLogger()
+            modules(serverModule)
+        }
     }
 
     install(DefaultHeaders)

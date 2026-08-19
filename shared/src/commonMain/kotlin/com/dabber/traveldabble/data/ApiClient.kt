@@ -1,7 +1,11 @@
 package com.dabber.traveldabble.data
 
 import com.dabber.traveldabble.model.Destination
+import com.dabber.traveldabble.model.ActivityItem
+import com.dabber.traveldabble.model.DayPlan
+import com.dabber.traveldabble.model.Expense
 import com.dabber.traveldabble.model.InviteCode
+import com.dabber.traveldabble.model.Place
 import com.dabber.traveldabble.model.Trip
 import com.dabber.traveldabble.model.TripMember
 import io.ktor.client.call.body
@@ -28,6 +32,36 @@ data class AuthResponse(val token: String, val userId: String, val displayName: 
 
 @Serializable
 data class CreateTripRequest(val title: String, val destination: String, val country: String, val startDate: String, val endDate: String, val travelers: Int)
+
+@Serializable
+private data class AddDayPlanRequest(val dayNumber: Int, val dateLabel: String)
+
+@Serializable
+private data class AddActivityPlace(
+    val name: String,
+    val category: String,
+    val lat: Double,
+    val lng: Double,
+    val rating: Float,
+    val description: String,
+    val openHours: String,
+)
+
+@Serializable
+private data class AddActivityRequest(
+    val place: AddActivityPlace,
+    val startTime: String,
+    val endTime: String,
+    val note: String? = null,
+)
+
+@Serializable
+private data class AddExpenseRequest(
+    val title: String,
+    val category: String,
+    val amount: Double,
+    val date: String,
+)
 
 @Serializable
 data class GenerateInviteRequest(val maxUses: Int? = null, val expiresInHours: Int? = null)
@@ -147,8 +181,75 @@ object ApiClient {
         return response.body()
     }
 
+    suspend fun addDayPlan(tripId: String, dayNumber: Int, dateLabel: String): DayPlan {
+        val response: HttpResponse = httpClient.post("$baseUrl/api/trips/$tripId/days") {
+            authHeader()
+            contentType(ContentType.Application.Json)
+            setBody(AddDayPlanRequest(dayNumber, dateLabel))
+        }
+        return response.body()
+    }
+
     suspend fun deleteTrip(id: String) {
         httpClient.delete("$baseUrl/api/trips/$id") {
+            authHeader()
+        }
+    }
+
+    suspend fun addActivity(
+        tripId: String,
+        dayId: String,
+        place: Place,
+        startTime: String,
+        endTime: String,
+        note: String?,
+    ): ActivityItem {
+        val response: HttpResponse = httpClient.post("$baseUrl/api/trips/$tripId/days/$dayId/activities") {
+            authHeader()
+            contentType(ContentType.Application.Json)
+            setBody(
+                AddActivityRequest(
+                    place = AddActivityPlace(
+                        name = place.name,
+                        category = place.category.name,
+                        lat = place.lat,
+                        lng = place.lng,
+                        rating = place.rating,
+                        description = place.description,
+                        openHours = place.openHours,
+                    ),
+                    startTime = startTime,
+                    endTime = endTime,
+                    note = note,
+                )
+            )
+        }
+        return response.body()
+    }
+
+    suspend fun removeActivity(tripId: String, activityId: String) {
+        httpClient.delete("$baseUrl/api/trips/$tripId/activities/$activityId") {
+            authHeader()
+        }
+    }
+
+    suspend fun addExpense(
+        tripId: String,
+        title: String,
+        category: String,
+        amount: Double,
+        date: String,
+    ): Expense {
+        val response: HttpResponse = httpClient.post("$baseUrl/api/trips/$tripId/budget/expenses") {
+            authHeader()
+            contentType(ContentType.Application.Json)
+            setBody(AddExpenseRequest(title, category, amount, date))
+        }
+        return response.body()
+    }
+
+    suspend fun removeExpense(tripId: String, expenseId: String) {
+        httpClient.delete("$baseUrl/api/trips/$tripId/budget/expenses/$expenseId") {
             authHeader()
         }
     }

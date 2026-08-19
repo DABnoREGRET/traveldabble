@@ -39,16 +39,19 @@ import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Route
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.ViewInAr
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -78,6 +81,7 @@ import com.dabber.traveldabble.ui.theme.AuroraGold
 import com.dabber.traveldabble.ui.theme.AuroraTeal
 import com.dabber.traveldabble.ui.theme.SpaceDeep
 import com.dabber.traveldabble.ui.theme.SpaceNight
+import kotlinx.coroutines.launch
 
 /**
  * High-contrast surface modifier for floating map cards to eliminate "bright on bright" issues.
@@ -143,6 +147,9 @@ fun MapScreen(
     var showUserLocation by remember { mutableStateOf(true) }
     var autoCenter by remember { mutableStateOf(initialLat == null && focusPlaceId == null) }
     var selectedPlace by remember { mutableStateOf<Place?>(null) }
+    var showAddPlaceDialog by remember { mutableStateOf(false) }
+    var addPlaceDayNumber by remember { mutableStateOf(1) }
+    val scope = rememberCoroutineScope()
 
     LaunchedEffect(tripId) {
         selectedTripId = tripId
@@ -196,6 +203,63 @@ fun MapScreen(
 
     val loadedTrip = trip
 
+    if (showAddPlaceDialog && selectedPlace != null && loadedTrip != null) {
+        val placeToAdd = selectedPlace!!
+        AlertDialog(
+            onDismissRequest = { showAddPlaceDialog = false },
+            title = { Text("Add ${placeToAdd.name} to trip") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        "Choose the day for this point of interest.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        loadedTrip.days.forEach { day ->
+                            GlassChip(
+                                label = "Day ${day.dayNumber}",
+                                selected = addPlaceDayNumber == day.dayNumber,
+                                onClick = { addPlaceDayNumber = day.dayNumber },
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        scope.launch {
+                            Repository.addActivityToTrip(
+                                tripId = loadedTrip.id,
+                                dayNumber = addPlaceDayNumber,
+                                place = placeToAdd,
+                                startTime = "09:00",
+                                endTime = "11:00",
+                                note = "Added from trip map",
+                            )
+                            trip = Repository.getTrip(loadedTrip.id)?.toUi()
+                            showAddPlaceDialog = false
+                            selectedPlace = null
+                        }
+                    },
+                ) {
+                    Text("Add to itinerary")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAddPlaceDialog = false }) {
+                    Text("Cancel")
+                }
+            },
+        )
+    }
+
     // Filter places based on selected trip, selected day, and category filter
     val currentDayPlan: DayPlan? = remember(loadedTrip, selectedDayNumber) {
         if (loadedTrip != null && selectedDayNumber != null) {
@@ -205,8 +269,14 @@ fun MapScreen(
 
     val placesForMap = remember(loadedTrip, selectedDayNumber, selectedCategoryFilter, allPlaces, selectedPlace) {
         val basePlaces = when {
-            currentDayPlan != null -> currentDayPlan.activities.map { it.place }
-            loadedTrip != null -> loadedTrip.days.flatMap { it.activities }.map { it.place }.distinctBy { it.id }
+            loadedTrip != null -> {
+                val itineraryPlaces = if (currentDayPlan != null) {
+                    currentDayPlan.activities.map { it.place }
+                } else {
+                    loadedTrip.days.flatMap { it.activities }.map { it.place }
+                }
+                (itineraryPlaces + allPlaces).distinctBy { it.id }
+            }
             else -> allPlaces
         }
 
@@ -224,6 +294,14 @@ fun MapScreen(
         }
     }
 
+    val routePlaces = remember(loadedTrip, selectedDayNumber) {
+        when {
+            currentDayPlan != null -> currentDayPlan.activities.map { it.place }
+            loadedTrip != null -> loadedTrip.days.flatMap { it.activities }.map { it.place }
+            else -> emptyList()
+        }
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
         // 1. Google Maps Vector Surface with turn-by-turn road curves
         TravelMap(
@@ -232,6 +310,7 @@ fun MapScreen(
             modifier = Modifier.fillMaxSize(),
             tilt3d = tilt3d,
             showPolylines = showPolylines && (loadedTrip != null || currentDayPlan != null),
+            routePlaces = routePlaces,
             showUserLocation = showUserLocation,
             autoCenterOnLocation = autoCenter,
             focusLocation = focusLocation,
@@ -360,7 +439,7 @@ fun MapScreen(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 GlassChip(
-                    label = "All (${if (loadedTrip != null) loadedTrip.days.flatMap { it.activities }.size else allPlaces.size})",
+                    label = "All (${placesForMap.size})",
                     selected = selectedCategoryFilter == null,
                     tint = if (selectedCategoryFilter == null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                     onClick = { selectedCategoryFilter = null },
@@ -669,6 +748,7 @@ private fun PlaceDetailPopup(
     place: Place,
     onDismiss: () -> Unit,
     onOpen: () -> Unit,
+    onAddToTrip: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     Box(
@@ -718,6 +798,11 @@ private fun PlaceDetailPopup(
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
+                onAddToTrip?.let {
+                    TextButton(onClick = it) {
+                        Text("Add to itinerary")
+                    }
+                }
             }
 
             Column(

@@ -116,6 +116,26 @@ class AiServiceMockTest {
     }
 
     @Test
+    fun testSendMessageReturnsProviderError() = runTest {
+        val mockClient = createMockHttpClient {
+            respond(
+                content = """{"error":{"message":"No endpoints found for this model"}}""",
+                status = HttpStatusCode.BadGateway,
+                headers = headersOf(HttpHeaders.ContentType, "application/json")
+            )
+        }
+
+        ApiClient.setMockHttpClient(mockClient)
+        val result = AiService.sendMessage(
+            tripId = "test-trip",
+            userMessage = "Hello",
+        )
+
+        assertTrue(result is AiResult.Error)
+        assertEquals("No endpoints found for this model", result.message)
+    }
+
+    @Test
     fun testSendMessageWithCustomModelSelection() = runTest {
         var capturedRequestBody: String? = null
 

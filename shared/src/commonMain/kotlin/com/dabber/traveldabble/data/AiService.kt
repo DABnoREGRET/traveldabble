@@ -150,11 +150,7 @@ object AiService {
                     return null
                 }
                 val errorBody = runCatching { e.response.body<String>() }.getOrNull()
-                val parsedMsg = if (!errorBody.isNullOrBlank()) {
-                    runCatching {
-                        json.parseToJsonElement(errorBody).jsonObject["error"]?.jsonPrimitive?.contentOrNull
-                    }.getOrNull() ?: errorBody
-                } else null
+                val parsedMsg = parseAiErrorMessage(errorBody)
 
                 val errorMsg = parsedMsg ?: when (e.response.status.value) {
                     400 -> "AI request rejected. Please check your model settings or key."
@@ -171,6 +167,12 @@ object AiService {
                 json.parseToJsonElement(rawResponse).jsonObject
             } catch (_: Exception) {
                 return null
+            }
+
+            if (responseJson["error"] != null) {
+                return AiResult.Error(
+                    parseAiErrorMessage(rawResponse) ?: "AI provider returned an error."
+                )
             }
 
             val content = responseJson["content"]?.jsonPrimitive?.contentOrNull ?: ""
@@ -253,8 +255,16 @@ object AiService {
                     AiResult.Success(content, true)
                 } else null
             } else {
-                null
+                AiResult.Error(
+                    parseAiErrorMessage(resp.bodyAsText())
+                        ?: "AI service error (${resp.status.value})"
+                )
             }
+        } catch (e: io.ktor.client.plugins.ResponseException) {
+            AiResult.Error(
+                parseAiErrorMessage(runCatching { e.response.bodyAsText() }.getOrNull())
+                    ?: "AI service error (${e.response.status.value})"
+            )
         } catch (_: Exception) {
             null
         }
@@ -431,6 +441,20 @@ object AiService {
             DEFAULT_AI_MODELS
         }
     }
+}
+
+private fun parseAiErrorMessage(body: String?): String? {
+    if (body.isNullOrBlank()) return null
+    val parsed = runCatching { Json.parseToJsonElement(body).jsonObject }.getOrNull()
+    val error = parsed?.get("error")
+    val message = when {
+        error is JsonObject -> error["message"]?.jsonPrimitive?.contentOrNull
+        error is JsonPrimitive -> error.contentOrNull
+        else -> null
+    } ?: parsed?.get("message")?.jsonPrimitive?.contentOrNull
+
+    return message?.takeIf { it.isNotBlank() }
+        ?: body.trim().takeIf { it.isNotBlank() && it.length <= 500 }
 }
 
 sealed class AiResult {

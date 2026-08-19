@@ -88,7 +88,9 @@ fun Route.TripContentRoutes() {
                 if (!verifyAccess(tripId, userId)) return@post call.respond(HttpStatusCode.NotFound, ApiError("Trip not found"))
                 try {
                     val activity = transaction {
-                        val dayExists = DayPlans.selectAll().where { DayPlans.id eq dayId }.singleOrNull() != null
+                        val dayExists = DayPlans.selectAll().where {
+                            (DayPlans.id eq dayId) and (DayPlans.tripId eq tripId)
+                        }.singleOrNull() != null
                         if (!dayExists) return@transaction null
                         val placeId = UUID.randomUUID()
                         Places.insert {
@@ -156,8 +158,16 @@ fun Route.TripContentRoutes() {
                 if (!verifyAccess(tripId, userId)) return@delete call.respond(HttpStatusCode.NotFound, ApiError("Trip not found"))
                 try {
                     val deleted = transaction {
-                        val placeId = Activities.selectAll().where { Activities.id eq activityId }.singleOrNull()?.get(Activities.placeId)?.value
-                        val count = Activities.deleteWhere { Activities.id eq activityId }
+                        val activityRow = (Activities innerJoin DayPlans)
+                            .selectAll()
+                            .where { (Activities.id eq activityId) and (DayPlans.tripId eq tripId) }
+                            .singleOrNull()
+                        val placeId = activityRow?.get(Activities.placeId)?.value
+                        val count = if (activityRow != null) {
+                            Activities.deleteWhere { Activities.id eq activityId }
+                        } else {
+                            0
+                        }
                         placeId?.let { pid -> Places.deleteWhere { Places.id eq pid } }
                         count > 0
                     }

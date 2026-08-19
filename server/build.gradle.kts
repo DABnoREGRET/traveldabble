@@ -36,6 +36,7 @@ dependencies {
     // Ktor client (for OSRM, OpenWeatherMap, OpenRouter proxy, Web search)
     implementation(libs.ktor.client.core)
     implementation(libs.ktor.client.cio)
+    implementation(libs.ktor.client.okhttp)
     implementation(libs.ktor.client.content.negotiation)
 
     // Serialization
@@ -64,3 +65,8 @@ dependencies {
     testImplementation(libs.ktor.server.test.host)
     testImplementation(libs.kotlin.test.junit)
 }
+
+tasks.test {
+    maxParallelForks = 1
+}
+

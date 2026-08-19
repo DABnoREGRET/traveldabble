@@ -17,7 +17,11 @@ object DatabaseFactory {
     lateinit var dataSource: DataSource
         private set
 
+    @Volatile
+    private var initialized = false
+
     fun init(config: ApplicationConfig) {
+        if (initialized) return
         val rawUrl = System.getenv("DATABASE_URL")
             ?: System.getenv("DB_URL")
             ?: config.propertyOrNull("database.url")?.getString()
@@ -43,11 +47,16 @@ object DatabaseFactory {
         defaultPassword: String = "",
         maxPoolSize: Int = 10,
     ) {
-        val (jdbcUrl, user, password) = resolveDbUrl(rawUrl, defaultUser, defaultPassword)
-        dataSource = hikari(jdbcUrl, user, password, maxPoolSize)
-        Database.connect(dataSource)
-        migrate(dataSource)
-        SeedData.seed()
+        if (initialized) return
+        synchronized(this) {
+            if (initialized) return
+            val (jdbcUrl, user, password) = resolveDbUrl(rawUrl, defaultUser, defaultPassword)
+            dataSource = hikari(jdbcUrl, user, password, maxPoolSize)
+            Database.connect(dataSource)
+            migrate(dataSource)
+            SeedData.seed()
+            initialized = true
+        }
     }
 
     private fun resolveDbUrl(

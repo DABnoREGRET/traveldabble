@@ -57,6 +57,7 @@ object Mappers {
         dayNumber = this[DayPlans.dayNumber],
         dateLabel = this[DayPlans.dateLabel],
         activities = emptyList(),
+        id = this[DayPlans.id].value.toString(),
     )
 
     fun ResultRow.toActivityRow(placeId: java.util.UUID): ActivityItem {
@@ -96,6 +97,7 @@ object Mappers {
                     dayNumber = dayRow[DayPlans.dayNumber],
                     dateLabel = dayRow[DayPlans.dateLabel],
                     activities = activities,
+                    id = dayRow[DayPlans.id].value.toString(),
                 )
             }
         val budget = Budgets.selectAll()

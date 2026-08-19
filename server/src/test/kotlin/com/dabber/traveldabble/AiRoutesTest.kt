@@ -1,10 +1,12 @@
 package com.dabber.traveldabble
 
+import com.dabber.traveldabble.config.DatabaseFactory
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.server.testing.*
 import kotlinx.serialization.json.*
+import org.junit.BeforeClass
 import kotlin.test.*
 
 /**
@@ -14,6 +16,14 @@ import kotlin.test.*
  *   POST /api/ai/chat  (no-key 503 path; actual AI calls require external key)
  */
 class AiRoutesTest {
+
+    companion object {
+        @BeforeClass
+        @JvmStatic
+        fun setupClass() {
+            DatabaseFactory.init()
+        }
+    }
 
     @Test
     fun testAiHealthEndpoint() = testApplication {

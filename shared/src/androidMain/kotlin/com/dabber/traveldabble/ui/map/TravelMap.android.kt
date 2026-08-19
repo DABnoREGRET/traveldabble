@@ -178,6 +178,7 @@ private class MapFeatureHolder(val mapView: MapView) {
     fun updatePlacesAndRoutes(
         map: MapLibreMap?,
         places: List<Place>,
+        routePlaces: List<Place>,
         showPolylines: Boolean,
         coroutineScope: CoroutineScope,
         onMarkerClick: (Place) -> Unit,
@@ -214,7 +215,7 @@ private class MapFeatureHolder(val mapView: MapView) {
                 lm.deleteAll()
                 clm.deleteAll()
 
-                if (showPolylines && places.isNotEmpty()) {
+                if (showPolylines && routePlaces.isNotEmpty()) {
                     val userLocation = try {
                         if (map?.locationComponent?.isLocationComponentActivated == true) {
                             map.locationComponent.lastKnownLocation?.let { it.latitude to it.longitude }
@@ -222,8 +223,8 @@ private class MapFeatureHolder(val mapView: MapView) {
                     } catch (_: Throwable) { null }
 
                     val waypoints = when {
-                        userLocation != null -> listOf(userLocation) + places.map { it.lat to it.lng }
-                        places.size >= 2 -> places.map { it.lat to it.lng }
+                        userLocation != null -> listOf(userLocation) + routePlaces.map { it.lat to it.lng }
+                        routePlaces.size >= 2 -> routePlaces.map { it.lat to it.lng }
                         else -> emptyList()
                     }
 
@@ -276,6 +277,7 @@ actual fun TravelMap(
     modifier: Modifier,
     tilt3d: Boolean,
     showPolylines: Boolean,
+    routePlaces: List<Place>,
     showUserLocation: Boolean,
     autoCenterOnLocation: Boolean,
     focusLocation: Pair<Double, Double>?,
@@ -357,7 +359,7 @@ actual fun TravelMap(
                             .bearing(0.0)
                             .build()
 
-                        featureHolder.updatePlacesAndRoutes(map, places, showPolylines, scope, onMarkerClick)
+                        featureHolder.updatePlacesAndRoutes(map, places, routePlaces, showPolylines, scope, onMarkerClick)
 
                         if (showUserLocation) {
                             try {
@@ -378,7 +380,7 @@ actual fun TravelMap(
                                 locationComponent.cameraMode = CameraMode.NONE
                                 locationComponent.renderMode = RenderMode.NORMAL
                                 // Re-run route update with user location now active
-                                featureHolder.updatePlacesAndRoutes(map, places, showPolylines, scope, onMarkerClick)
+                                featureHolder.updatePlacesAndRoutes(map, places, routePlaces, showPolylines, scope, onMarkerClick)
                             } catch (_: Throwable) {}
                         }
                     }
@@ -395,10 +397,10 @@ actual fun TravelMap(
                     if (currentStyle == null || featureHolder.activeStyleUrl != targetStyleUrl) {
                         map.setStyle(targetStyleUrl) { loadedStyle ->
                             featureHolder.resetManagers(map, loadedStyle)
-                            featureHolder.updatePlacesAndRoutes(map, places, showPolylines, scope, onMarkerClick)
+                            featureHolder.updatePlacesAndRoutes(map, places, routePlaces, showPolylines, scope, onMarkerClick)
                         }
                     } else {
-                        featureHolder.updatePlacesAndRoutes(map, places, showPolylines, scope, onMarkerClick)
+                        featureHolder.updatePlacesAndRoutes(map, places, routePlaces, showPolylines, scope, onMarkerClick)
                     }
 
                     // Camera position updates: prioritize focusLocation

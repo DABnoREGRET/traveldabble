@@ -37,6 +37,7 @@ data class DayPlan(
     val dayNumber: Int,
     val dateLabel: String,
     val activities: List<ActivityItem>,
+    val id: String? = null,
 )
 
 @Serializable
