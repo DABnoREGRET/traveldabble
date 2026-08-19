@@ -27,6 +27,7 @@ import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SelectableDates
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDatePickerState
@@ -56,6 +57,33 @@ import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 
+@OptIn(ExperimentalMaterial3Api::class)
+internal object FutureOrPresentSelectableDates : SelectableDates {
+    override fun isSelectableDate(utcTimeMillis: Long): Boolean {
+        val todayEpochDays = Clock.System.now().toLocalDateTime(TimeZone.UTC).date.toEpochDays()
+        val pickedEpochDays = Instant.fromEpochMilliseconds(utcTimeMillis).toLocalDateTime(TimeZone.UTC).date.toEpochDays()
+        return pickedEpochDays >= todayEpochDays
+    }
+
+    override fun isSelectableYear(year: Int): Boolean {
+        val currentYear = Clock.System.now().toLocalDateTime(TimeZone.UTC).year
+        return year >= currentYear
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+internal class MinDateSelectableDates(private val minEpochDays: Int) : SelectableDates {
+    override fun isSelectableDate(utcTimeMillis: Long): Boolean {
+        val pickedEpochDays = Instant.fromEpochMilliseconds(utcTimeMillis).toLocalDateTime(TimeZone.UTC).date.toEpochDays()
+        return pickedEpochDays >= minEpochDays
+    }
+
+    override fun isSelectableYear(year: Int): Boolean {
+        val currentYear = Clock.System.now().toLocalDateTime(TimeZone.UTC).year
+        return year >= currentYear
+    }
+}
+
 private fun formatDateFromMillis(millis: Long): String {
     val instant = Instant.fromEpochMilliseconds(millis)
     val localDate = instant.toLocalDateTime(TimeZone.UTC).date
@@ -79,7 +107,7 @@ private fun formatDateFromMillis(millis: Long): String {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CreateTripScreen(onBack: () -> Unit, onCreated: () -> Unit) {
+fun CreateTripScreen(onBack: () -> Unit, onCreated: (String) -> Unit) {
     var title by remember { mutableStateOf("") }
     var destination by remember { mutableStateOf("") }
     var country by remember { mutableStateOf("Vietnam") }
@@ -134,15 +162,24 @@ fun CreateTripScreen(onBack: () -> Unit, onCreated: () -> Unit) {
             countryError = null
         }
 
+        val today = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).date
+        val startParsed = Repository.parseDateStringToLocalDate(startDate)
         if (startDate.trim().isEmpty()) {
             startDateError = "Please select a start date"
+            isValid = false
+        } else if (startParsed != null && startParsed < today) {
+            startDateError = "Start date cannot be in the past"
             isValid = false
         } else {
             startDateError = null
         }
 
+        val endParsed = Repository.parseDateStringToLocalDate(endDate)
         if (endDate.trim().isEmpty()) {
             endDateError = "Please select an end date"
+            isValid = false
+        } else if (startParsed != null && endParsed != null && endParsed < startParsed) {
+            endDateError = "End date must be on or after start date"
             isValid = false
         } else {
             endDateError = null
@@ -175,17 +212,19 @@ fun CreateTripScreen(onBack: () -> Unit, onCreated: () -> Unit) {
             )
             submitting = false
             if (created != null) {
-                onCreated()
+                onCreated(created.id)
             } else {
                 generalError = "Could not create trip. Please check your network or server connection."
             }
         }
     }
 
-    // Material 3 Date Picker Dialog for Start Date
+    // Material 3 Date Picker Dialog for Start Date (Future & Present only)
     if (showStartDatePicker) {
+        val nowMillis = Clock.System.now().toEpochMilliseconds()
         val datePickerState = rememberDatePickerState(
-            initialSelectedDateMillis = Clock.System.now().toEpochMilliseconds()
+            initialSelectedDateMillis = nowMillis,
+            selectableDates = FutureOrPresentSelectableDates,
         )
         DatePickerDialog(
             onDismissRequest = { showStartDatePicker = false },
@@ -212,10 +251,18 @@ fun CreateTripScreen(onBack: () -> Unit, onCreated: () -> Unit) {
         }
     }
 
-    // Material 3 Date Picker Dialog for End Date
+    // Material 3 Date Picker Dialog for End Date (>= Start Date)
     if (showEndDatePicker) {
+        val startLocalDate = Repository.parseDateStringToLocalDate(startDate)
+        val nowLocalDate = Clock.System.now().toLocalDateTime(TimeZone.UTC).date
+        val minEpochDays = startLocalDate?.toEpochDays() ?: nowLocalDate.toEpochDays()
+        val initialEndMillis = startLocalDate?.let {
+            Instant.fromEpochMilliseconds(it.toEpochDays() * 24L * 60 * 60 * 1000).toEpochMilliseconds() + (3L * 24 * 60 * 60 * 1000)
+        } ?: (Clock.System.now().toEpochMilliseconds() + (7L * 24 * 60 * 60 * 1000))
+
         val datePickerState = rememberDatePickerState(
-            initialSelectedDateMillis = Clock.System.now().toEpochMilliseconds() + (7L * 24 * 60 * 60 * 1000)
+            initialSelectedDateMillis = initialEndMillis,
+            selectableDates = MinDateSelectableDates(minEpochDays),
         )
         DatePickerDialog(
             onDismissRequest = { showEndDatePicker = false },

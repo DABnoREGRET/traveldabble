@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -108,18 +109,14 @@ fun BudgetScreen(tripId: String, onBack: () -> Unit) {
     val totalSpent = budget.spent
 
     val displayCategories = remember(budget) {
-        if (budget.categories.isNotEmpty()) {
-            budget.categories
-        } else if (budget.expenses.isNotEmpty()) {
+        if (budget.expenses.isNotEmpty()) {
             budget.expenses.groupBy { it.category }
                 .map { (cat, exps) -> cat to exps.sumOf { it.amount } }
+                .sortedByDescending { it.second }
+        } else if (budget.categories.isNotEmpty() && budget.categories.any { it.second > 0 }) {
+            budget.categories.filter { it.second > 0 }.sortedByDescending { it.second }
         } else {
-            listOf(
-                "Lodging" to budget.total * 0.4,
-                "Food" to budget.total * 0.25,
-                "Transport" to budget.total * 0.2,
-                "Activities" to budget.total * 0.15
-            )
+            emptyList()
         }
     }
 
@@ -408,7 +405,33 @@ fun BudgetScreen(tripId: String, onBack: () -> Unit) {
             )
         }
 
-        if (displayCategories.isNotEmpty()) {
+        if (displayCategories.isEmpty()) {
+            item {
+                GlassCard(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+                    intensity = GlassIntensity.Subtle,
+                    contentPadding = 18.dp,
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Text(
+                            "No Category Spending Yet",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Text(
+                            "Category breakdown statistics will be computed once you log expenses below.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        )
+                    }
+                }
+            }
+        } else {
             val totalCat = displayCategories.sumOf { it.second }
             item {
                 GlassCard(
@@ -437,6 +460,7 @@ fun BudgetScreen(tripId: String, onBack: () -> Unit) {
                             horizontalArrangement = Arrangement.SpaceBetween,
                         ) {
                             displayCategories.forEachIndexed { index, (cat, amount) ->
+                                val pct = if (totalCat > 0) ((amount / totalCat) * 100).toInt() else 0
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -447,7 +471,7 @@ fun BudgetScreen(tripId: String, onBack: () -> Unit) {
                                             .background(categoryColors[index % categoryColors.size], RoundedCornerShape(2.dp)),
                                     )
                                     Text(
-                                        "$cat: ${amount.toInt()}",
+                                        "$cat: ${amount.toInt()} USD ($pct%)",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
@@ -460,6 +484,7 @@ fun BudgetScreen(tripId: String, onBack: () -> Unit) {
 
             items(displayCategories.size) { index ->
                 val (cat, amount) = displayCategories[index]
+                val pct = if (totalCat > 0) ((amount / totalCat) * 100).toInt() else 0
                 GlassCard(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
                     intensity = GlassIntensity.Subtle,
@@ -469,21 +494,32 @@ fun BudgetScreen(tripId: String, onBack: () -> Unit) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(10.dp)
+                                        .background(categoryColors[index % categoryColors.size], CircleShape),
+                                )
+                                Text(
+                                    cat,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                )
+                            }
                             Text(
-                                cat,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurface,
-                            )
-                            Text(
-                                "${amount.toInt()} USD",
+                                "${formatExpenseAmount(amount)} USD ($pct%)",
                                 style = MaterialTheme.typography.titleSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                color = MaterialTheme.colorScheme.primary,
                             )
                         }
                         Spacer(Modifier.height(8.dp))
                         ProgressTrack(
-                            fraction = if (budget.total > 0) ((amount / budget.total) * 2f).toFloat().coerceIn(0f, 1f) else 0f,
+                            fraction = if (totalCat > 0) (amount / totalCat).toFloat().coerceIn(0f, 1f) else 0f,
                             color = categoryColors[index % categoryColors.size],
                         )
                     }
@@ -506,7 +542,7 @@ fun BudgetScreen(tripId: String, onBack: () -> Unit) {
                     color = MaterialTheme.colorScheme.onSurface,
                 )
                 GlassButton(
-                    label = "Add",
+                    label = "Log Expense",
                     icon = Icons.Filled.Add,
                     onClick = { showAddExpenseDialog = true },
                     accent = true,
@@ -533,7 +569,7 @@ fun BudgetScreen(tripId: String, onBack: () -> Unit) {
                             color = MaterialTheme.colorScheme.onSurface,
                         )
                         Text(
-                            "Tap \"Add\" above to log meals, transit, lodging, or activities.",
+                            "Tap \"Log Expense\" above to record meals, transit, lodging, or activities.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
@@ -555,18 +591,35 @@ fun BudgetScreen(tripId: String, onBack: () -> Unit) {
                     ) {
                         Column(
                             modifier = Modifier.weight(1f),
-                            verticalArrangement = Arrangement.spacedBy(2.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
                         ) {
                             Text(
                                 expense.title,
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurface,
                             )
-                            Text(
-                                "${expense.category}  •  ${expense.date}",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))
+                                        .padding(horizontal = 8.dp, vertical = 2.dp),
+                                ) {
+                                    Text(
+                                        expense.category,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.primary,
+                                    )
+                                }
+                                Text(
+                                    "•  ${expense.date}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
                         }
                         Row(
                             verticalAlignment = Alignment.CenterVertically,

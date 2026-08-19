@@ -11,6 +11,10 @@ import com.dabber.traveldabble.model.TripMember
 import com.dabber.traveldabble.ui.mock.MockData
 import com.dabber.traveldabble.ui.mock.toDomain
 import com.russhwolf.settings.Settings
+import kotlinx.datetime.Clock
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
@@ -31,6 +35,45 @@ object Repository {
     private val localUserTrips = mutableListOf<Trip>()
     private val deletedDemoTripIds = mutableSetOf<String>()
 
+    private val MONTH_MAP = mapOf(
+        "jan" to 1, "feb" to 2, "mar" to 3, "apr" to 4, "may" to 5, "jun" to 6,
+        "jul" to 7, "aug" to 8, "sep" to 9, "oct" to 10, "nov" to 11, "dec" to 12,
+        "january" to 1, "february" to 2, "march" to 3, "april" to 4, "may" to 5, "june" to 6,
+        "july" to 7, "august" to 8, "september" to 9, "october" to 10, "november" to 11, "december" to 12
+    )
+
+    fun parseDateStringToLocalDate(str: String): LocalDate? {
+        val clean = str.trim().replace(",", "").replace("-", " ").replace("/", " ")
+        if (clean.isBlank()) return null
+
+        val isoParts = str.trim().split("-")
+        if (isoParts.size == 3) {
+            val y = isoParts[0].toIntOrNull()
+            val m = isoParts[1].toIntOrNull()
+            val d = isoParts[2].toIntOrNull()
+            if (y != null && m != null && d != null) {
+                return runCatching { LocalDate(y, m, d) }.getOrNull()
+            }
+        }
+
+        val tokens = clean.split(" ").filter { it.isNotBlank() }
+        if (tokens.size >= 2) {
+            val m1 = MONTH_MAP[tokens[0].lowercase()]
+            val m2 = MONTH_MAP[tokens[1].lowercase()]
+
+            if (m1 != null) {
+                val day = tokens[1].toIntOrNull() ?: 1
+                val year = tokens.getOrNull(2)?.toIntOrNull() ?: Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).year
+                return runCatching { LocalDate(year, m1, day) }.getOrNull()
+            } else if (m2 != null) {
+                val day = tokens[0].toIntOrNull() ?: 1
+                val year = tokens.getOrNull(2)?.toIntOrNull() ?: Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).year
+                return runCatching { LocalDate(year, m2, day) }.getOrNull()
+            }
+        }
+        return null
+    }
+
     init {
         loadPersistedData()
     }
@@ -39,18 +82,15 @@ object Repository {
         try {
             val storedTrips = kvSettings?.getStringOrNull(LOCAL_TRIPS_KEY)
             if (!storedTrips.isNullOrBlank()) {
-                val list = json.decodeFromString<List<Trip>>(storedTrips)
+                val decoded = json.decodeFromString<List<Trip>>(storedTrips)
                 localUserTrips.clear()
-                localUserTrips.addAll(list)
+                localUserTrips.addAll(decoded)
             }
-        } catch (_: Throwable) {}
-
-        try {
             val storedDeleted = kvSettings?.getStringOrNull(DELETED_DEMO_TRIPS_KEY)
             if (!storedDeleted.isNullOrBlank()) {
-                val list = json.decodeFromString<List<String>>(storedDeleted)
+                val decoded = json.decodeFromString<List<String>>(storedDeleted)
                 deletedDemoTripIds.clear()
-                deletedDemoTripIds.addAll(list)
+                deletedDemoTripIds.addAll(decoded)
             }
         } catch (_: Throwable) {}
     }
@@ -62,13 +102,69 @@ object Repository {
         } catch (_: Throwable) {}
     }
 
+    fun generateDayPlanLabels(startDate: String, endDate: String): List<String> {
+        val start = parseDateStringToLocalDate(startDate)
+        val end = parseDateStringToLocalDate(endDate)
+
+        val monthNames = listOf("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+
+        if (start != null && end != null && end >= start) {
+            val startEpoch = start.toEpochDays()
+            val endEpoch = end.toEpochDays()
+            val totalDays = (endEpoch - startEpoch + 1).coerceIn(1, 30)
+
+            return (0 until totalDays).map { offset ->
+                val d = LocalDate.fromEpochDays(startEpoch + offset)
+                val monthStr = monthNames.getOrElse(d.monthNumber - 1) { "Jan" }
+                "$monthStr ${d.dayOfMonth}, ${d.year}"
+            }
+        } else if (start != null) {
+            val startEpoch = start.toEpochDays()
+            return (0 until 3).map { offset ->
+                val d = LocalDate.fromEpochDays(startEpoch + offset)
+                val monthStr = monthNames.getOrElse(d.monthNumber - 1) { "Jan" }
+                "$monthStr ${d.dayOfMonth}, ${d.year}"
+            }
+        }
+
+        if (startDate.isNotBlank() && endDate.isNotBlank() && startDate != endDate) {
+            return listOf(startDate, "Day 2", endDate)
+        }
+        return listOf(startDate.ifBlank { "Day 1" }, "Day 2", "Day 3")
+    }
+
+    suspend fun addDayToTrip(tripId: String): DayPlan? {
+        val trip = getTrip(tripId) ?: return null
+        val nextDayNum = (trip.days.maxOfOrNull { it.dayNumber } ?: 0) + 1
+
+        val startLocalDate = parseDateStringToLocalDate(trip.startDate)
+        val monthNames = listOf("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+        val dateLabel = if (startLocalDate != null) {
+            val d = LocalDate.fromEpochDays(startLocalDate.toEpochDays() + (nextDayNum - 1))
+            val monthStr = monthNames.getOrElse(d.monthNumber - 1) { "Jan" }
+            "$monthStr ${d.dayOfMonth}, ${d.year}"
+        } else {
+            "Day $nextDayNum"
+        }
+
+        val remoteDay = if (AuthState.isLoggedIn && !AuthState.isGuestMode) {
+            runCatching { ApiClient.addDayPlan(tripId, nextDayNum, dateLabel) }.getOrNull()
+        } else null
+
+        val newDay = remoteDay ?: DayPlan(
+            id = "day_${System.currentTimeMillis()}",
+            dayNumber = nextDayNum,
+            dateLabel = dateLabel,
+            activities = emptyList(),
+        )
+
+        saveTrip(trip.copy(days = trip.days + newDay))
+        return newDay
+    }
+
     private suspend fun ensureRemoteTripDays(trip: Trip): Trip {
         if (!AuthState.isLoggedIn || AuthState.isGuestMode || trip.days.isNotEmpty()) return trip
-        val labels = listOf(
-            trip.startDate.ifBlank { "Day 1" },
-            "Day 2",
-            trip.endDate.ifBlank { "Day 3" },
-        )
+        val labels = generateDayPlanLabels(trip.startDate, trip.endDate)
         val days = labels.mapIndexedNotNull { index, label ->
             runCatching { ApiClient.addDayPlan(trip.id, index + 1, label) }.getOrNull()
         }
@@ -146,11 +242,10 @@ object Repository {
         }
 
         // Generate initial day structure
-        val initialDays = listOf(
-            DayPlan(dayNumber = 1, dateLabel = startDate.ifEmpty { "Day 1" }, activities = emptyList()),
-            DayPlan(dayNumber = 2, dateLabel = "Day 2", activities = emptyList()),
-            DayPlan(dayNumber = 3, dateLabel = endDate.ifEmpty { "Day 3" }, activities = emptyList()),
-        )
+        val dayLabels = generateDayPlanLabels(startDate, endDate)
+        val initialDays = dayLabels.mapIndexed { index, label ->
+            DayPlan(dayNumber = index + 1, dateLabel = label, activities = emptyList())
+        }
 
         val newTrip = remoteCreated ?: Trip(
             id = "trip_${System.currentTimeMillis()}",

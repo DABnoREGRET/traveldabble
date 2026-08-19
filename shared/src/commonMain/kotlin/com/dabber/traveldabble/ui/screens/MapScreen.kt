@@ -203,30 +203,53 @@ fun MapScreen(
 
     val loadedTrip = trip
 
-    if (showAddPlaceDialog && selectedPlace != null && loadedTrip != null) {
+    if (showAddPlaceDialog && selectedPlace != null) {
         val placeToAdd = selectedPlace!!
+        var targetTripId by remember { mutableStateOf(loadedTrip?.id ?: trips.firstOrNull()?.id ?: "") }
+        val targetTrip = trips.firstOrNull { it.id == targetTripId } ?: loadedTrip
+
         AlertDialog(
             onDismissRequest = { showAddPlaceDialog = false },
             title = { Text("Add ${placeToAdd.name} to trip") },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
-                        "Choose the day for this point of interest.",
+                        "Add this point of interest to your trip itinerary.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        loadedTrip.days.forEach { day ->
-                            GlassChip(
-                                label = "Day ${day.dayNumber}",
-                                selected = addPlaceDayNumber == day.dayNumber,
-                                onClick = { addPlaceDayNumber = day.dayNumber },
-                            )
+                    if (trips.size > 1) {
+                        Text("Select Trip:", style = MaterialTheme.typography.labelMedium)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            trips.forEach { t ->
+                                GlassChip(
+                                    label = t.title,
+                                    selected = targetTripId == t.id,
+                                    onClick = { targetTripId = t.id },
+                                )
+                            }
+                        }
+                    }
+                    if (targetTrip != null && targetTrip.days.isNotEmpty()) {
+                        Text("Select Day:", style = MaterialTheme.typography.labelMedium)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            targetTrip.days.forEach { day ->
+                                GlassChip(
+                                    label = "Day ${day.dayNumber}",
+                                    selected = addPlaceDayNumber == day.dayNumber,
+                                    onClick = { addPlaceDayNumber = day.dayNumber },
+                                )
+                            }
                         }
                     }
                 }
@@ -234,20 +257,25 @@ fun MapScreen(
             confirmButton = {
                 TextButton(
                     onClick = {
-                        scope.launch {
-                            Repository.addActivityToTrip(
-                                tripId = loadedTrip.id,
-                                dayNumber = addPlaceDayNumber,
-                                place = placeToAdd,
-                                startTime = "09:00",
-                                endTime = "11:00",
-                                note = "Added from trip map",
-                            )
-                            trip = Repository.getTrip(loadedTrip.id)?.toUi()
-                            showAddPlaceDialog = false
-                            selectedPlace = null
+                        val finalTripId = targetTrip?.id ?: targetTripId
+                        if (finalTripId.isNotBlank()) {
+                            scope.launch {
+                                Repository.addActivityToTrip(
+                                    tripId = finalTripId,
+                                    dayNumber = addPlaceDayNumber,
+                                    place = placeToAdd,
+                                    startTime = "09:00",
+                                    endTime = "11:00",
+                                    note = "Added from trip map",
+                                )
+                                val updatedTrips = Repository.getTrips().map { it.toUi() }
+                                trips = updatedTrips
+                                trip = updatedTrips.firstOrNull { it.id == (loadedTrip?.id ?: finalTripId) }
+                                showAddPlaceDialog = false
+                                selectedPlace = null
+                            }
                         }
-                    },
+                    }
                 ) {
                     Text("Add to itinerary")
                 }
@@ -256,7 +284,7 @@ fun MapScreen(
                 TextButton(onClick = { showAddPlaceDialog = false }) {
                     Text("Cancel")
                 }
-            },
+            }
         )
     }
 
@@ -538,6 +566,7 @@ fun MapScreen(
                         place = place,
                         onDismiss = { selectedPlace = null },
                         onOpen = { onPlaceClick(place.id) },
+                        onAddToTrip = { showAddPlaceDialog = true },
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
                     )
                 }

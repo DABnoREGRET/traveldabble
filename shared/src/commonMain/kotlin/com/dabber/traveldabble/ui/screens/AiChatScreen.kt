@@ -558,7 +558,7 @@ fun AiChatScreen(
                         color = MaterialTheme.colorScheme.onSurface,
                     )
                     GlassButton(
-                        label = "+ New Chat",
+                        label = "New Chat",
                         icon = Icons.Filled.Add,
                         onClick = {
                             val newConv = LocalChatStorage.createConversation("New Chat")

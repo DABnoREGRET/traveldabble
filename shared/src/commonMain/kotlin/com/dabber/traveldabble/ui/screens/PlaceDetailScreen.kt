@@ -62,6 +62,39 @@ import com.dabber.traveldabble.ui.theme.AuroraGold
 import com.dabber.traveldabble.ui.theme.AuroraTeal
 import com.dabber.traveldabble.ui.theme.CoverOcean
 import kotlinx.coroutines.launch
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.SelectableDates
+import androidx.compose.material3.rememberDatePickerState
+import com.dabber.traveldabble.ui.glass.glass
+import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
+
+private fun formatDateFromMillis(millis: Long): String {
+    val instant = Instant.fromEpochMilliseconds(millis)
+    val localDate = instant.toLocalDateTime(TimeZone.UTC).date
+    val monthName = when (localDate.monthNumber) {
+        1 -> "Jan"
+        2 -> "Feb"
+        3 -> "Mar"
+        4 -> "Apr"
+        5 -> "May"
+        6 -> "Jun"
+        7 -> "Jul"
+        8 -> "Aug"
+        9 -> "Sep"
+        10 -> "Oct"
+        11 -> "Nov"
+        12 -> "Dec"
+        else -> ""
+    }
+    return "$monthName ${localDate.dayOfMonth}, ${localDate.year}"
+}
 
 @Composable
 fun PlaceDetailScreen(
@@ -70,6 +103,7 @@ fun PlaceDetailScreen(
     onPlaceClick: ((String) -> Unit)? = null,
     onNavigateToMap: ((lat: Double, lng: Double, placeId: String?) -> Unit)? = null,
     onNavigateToPlanTrip: ((String) -> Unit)? = null,
+    onNavigateToTripDetail: ((String) -> Unit)? = null,
 ) {
     var place by remember { mutableStateOf<Place?>(null) }
     var destination by remember { mutableStateOf<Destination?>(null) }
@@ -78,6 +112,7 @@ fun PlaceDetailScreen(
 
     var userTrips by remember { mutableStateOf<List<Trip>>(emptyList()) }
     var showAddToTripDialog by remember { mutableStateOf(false) }
+    var showAdoptTripDialog by remember { mutableStateOf(false) }
     var selectedTargetPlace by remember { mutableStateOf<Place?>(null) }
     var addedSuccessMessage by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
@@ -146,6 +181,44 @@ fun PlaceDetailScreen(
         )
     }
 
+    // Adopt Recommended Destination Trip Dialog (Select Date Only)
+    val destToAdopt = destination
+    if (showAdoptTripDialog && destToAdopt != null) {
+        AdoptRecommendedTripModal(
+            destination = destToAdopt,
+            relatedPlaces = relatedPlaces,
+            onDismiss = { showAdoptTripDialog = false },
+            onConfirm = { startDate, endDate, travelersCount ->
+                scope.launch {
+                    val created = Repository.createTrip(
+                        title = "${destToAdopt.name} Discovery",
+                        destination = destToAdopt.name,
+                        country = destToAdopt.country,
+                        startDate = startDate,
+                        endDate = endDate,
+                        travelers = travelersCount,
+                    )
+                    if (created != null) {
+                        val numDays = created.days.size.coerceAtLeast(1)
+                        relatedPlaces.forEachIndexed { index, p ->
+                            val dayNumber = (index % numDays) + 1
+                            val isMorning = (index / numDays) % 2 == 0
+                            val startTime = if (isMorning) "09:30" else "14:30"
+                            val endTime = if (isMorning) "12:30" else "17:30"
+                            Repository.addActivityToTrip(created.id, dayNumber, p, startTime, endTime, p.description)
+                        }
+                        showAdoptTripDialog = false
+                        if (onNavigateToTripDetail != null) {
+                            onNavigateToTripDetail(created.id)
+                        } else {
+                            addedSuccessMessage = "Trip created! Added ${destToAdopt.name} to your trips."
+                        }
+                    }
+                }
+            }
+        )
+    }
+
     if (loading) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
@@ -179,7 +252,7 @@ fun PlaceDetailScreen(
             onBack = onBack,
             onPlaceClick = onPlaceClick,
             onNavigateToMap = onNavigateToMap,
-            onPlanTrip = onNavigateToPlanTrip,
+            onPlanTrip = { showAdoptTripDialog = true },
             onAddPlaceToItinerary = { targetPl ->
                 selectedTargetPlace = targetPl
                 if (userTrips.isEmpty()) {
@@ -323,7 +396,7 @@ private fun PlaceDetailContent(
                         modifier = Modifier.weight(1f),
                     )
                     GlassButton(
-                        label = "+ Add to Trip",
+                        label = "Add to Trip",
                         icon = Icons.Filled.Add,
                         onClick = onAddToItinerary,
                         accent = true,
@@ -624,5 +697,191 @@ private fun AddToTripModal(
                 }
             }
         },
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AdoptRecommendedTripModal(
+    destination: Destination,
+    relatedPlaces: List<Place>,
+    onDismiss: () -> Unit,
+    onConfirm: (startDate: String, endDate: String, travelers: Int) -> Unit,
+) {
+    val nowMillis = Clock.System.now().toEpochMilliseconds()
+    var startDate by remember { mutableStateOf(formatDateFromMillis(nowMillis + 7L * 24 * 60 * 60 * 1000)) }
+    var endDate by remember { mutableStateOf(formatDateFromMillis(nowMillis + 14L * 24 * 60 * 60 * 1000)) }
+    var travelers by remember { mutableStateOf("2") }
+
+    var showStartDatePicker by remember { mutableStateOf(false) }
+    var showEndDatePicker by remember { mutableStateOf(false) }
+
+    if (showStartDatePicker) {
+        val datePickerState = rememberDatePickerState(
+            initialSelectedDateMillis = nowMillis + 7L * 24 * 60 * 60 * 1000,
+            selectableDates = FutureOrPresentSelectableDates,
+        )
+        DatePickerDialog(
+            onDismissRequest = { showStartDatePicker = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        datePickerState.selectedDateMillis?.let {
+                            startDate = formatDateFromMillis(it)
+                        }
+                        showStartDatePicker = false
+                    }
+                ) {
+                    Text("Done")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showStartDatePicker = false }) {
+                    Text("Cancel")
+                }
+            }
+        ) {
+            DatePicker(state = datePickerState)
+        }
+    }
+
+    if (showEndDatePicker) {
+        val startLocalDate = Repository.parseDateStringToLocalDate(startDate)
+        val nowLocalDate = Clock.System.now().toLocalDateTime(TimeZone.UTC).date
+        val minEpochDays = startLocalDate?.toEpochDays() ?: nowLocalDate.toEpochDays()
+        val initialEndMillis = startLocalDate?.let {
+            Instant.fromEpochMilliseconds(it.toEpochDays() * 24L * 60 * 60 * 1000).toEpochMilliseconds() + (7L * 24 * 60 * 60 * 1000)
+        } ?: (nowMillis + 14L * 24 * 60 * 60 * 1000)
+
+        val datePickerState = rememberDatePickerState(
+            initialSelectedDateMillis = initialEndMillis,
+            selectableDates = MinDateSelectableDates(minEpochDays),
+        )
+        DatePickerDialog(
+            onDismissRequest = { showEndDatePicker = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        datePickerState.selectedDateMillis?.let {
+                            endDate = formatDateFromMillis(it)
+                        }
+                        showEndDatePicker = false
+                    }
+                ) {
+                    Text("Done")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showEndDatePicker = false }) {
+                    Text("Cancel")
+                }
+            }
+        ) {
+            DatePicker(state = datePickerState)
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text("Add ${destination.name} to Trips")
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                Text(
+                    "Select your dates and we'll automatically generate your full day-by-day itinerary with top highlights.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+
+                Text("Travel Dates *", style = MaterialTheme.typography.labelLarge)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .glass(shape = RoundedCornerShape(16.dp), intensity = GlassIntensity.Standard)
+                            .clickable { showStartDatePicker = true }
+                            .padding(horizontal = 12.dp, vertical = 12.dp),
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column {
+                                Text("Start Date", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                                Text(startDate, style = MaterialTheme.typography.bodySmall)
+                            }
+                            Icon(Icons.Filled.CalendarMonth, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+                        }
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .glass(shape = RoundedCornerShape(16.dp), intensity = GlassIntensity.Standard)
+                            .clickable { showEndDatePicker = true }
+                            .padding(horizontal = 12.dp, vertical = 12.dp),
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column {
+                                Text("End Date", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                                Text(endDate, style = MaterialTheme.typography.bodySmall)
+                            }
+                            Icon(Icons.Filled.CalendarMonth, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+                        }
+                    }
+                }
+
+                Text("Travelers", style = MaterialTheme.typography.labelLarge)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    listOf("1", "2", "3", "4", "5+").forEach { num ->
+                        GlassChip(
+                            label = "$num ${if (num == "1") "Person" else "People"}",
+                            selected = travelers == num || (num == "5+" && travelers.toIntOrNull() != null && travelers.toInt() >= 5),
+                            onClick = {
+                                travelers = if (num == "5+") "5" else num
+                            }
+                        )
+                    }
+                }
+
+                if (relatedPlaces.isNotEmpty()) {
+                    Text("Included Highlights:", style = MaterialTheme.typography.labelMedium)
+                    Text(
+                        relatedPlaces.take(4).joinToString(", ") { it.name },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    onConfirm(startDate, endDate, travelers.toIntOrNull() ?: 2)
+                }
+            ) {
+                Text("Add to My Trips")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
     )
 }

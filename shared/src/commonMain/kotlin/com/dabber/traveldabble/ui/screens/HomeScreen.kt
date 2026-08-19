@@ -83,6 +83,8 @@ fun HomeScreen(
     onExplore: () -> Unit,
     onSeeAllTrips: () -> Unit,
     onDestinationClick: (String) -> Unit,
+    onSearch: () -> Unit = onExplore,
+    onProfile: () -> Unit = {},
 ) {
     var trips by remember { mutableStateOf<List<Trip>>(emptyList()) }
     var destinations by remember { mutableStateOf<List<Destination>>(emptyList()) }
@@ -115,7 +117,7 @@ fun HomeScreen(
         verticalArrangement = Arrangement.spacedBy(18.dp),
     ) {
         item {
-            HomeHeader(onAskAi = onAskAi, onOpenMap = onOpenMap)
+            HomeHeader(onSearch = onSearch)
         }
         item {
             QuickActionsGrid(
@@ -197,10 +199,11 @@ fun HomeScreen(
 }
 
 @Composable
-private fun HomeHeader(onAskAi: () -> Unit, onOpenMap: () -> Unit) {
+private fun HomeHeader(
+    onSearch: () -> Unit,
+) {
     val user = AuthState.currentUser
     val displayName = user?.displayName ?: "Traveler"
-    val initial = (user?.displayName?.firstOrNull()?.uppercaseChar() ?: 'A').toString()
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -221,44 +224,11 @@ private fun HomeHeader(onAskAi: () -> Unit, onOpenMap: () -> Unit) {
                 color = MaterialTheme.colorScheme.onSurface,
             )
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            GlassIconButton(
-                Icons.Filled.Search,
-                contentDescription = "Search",
-                onClick = {},
-            )
-            GlassIconButton(
-                Icons.Filled.Map,
-                contentDescription = "Map",
-                onClick = onOpenMap,
-            )
-            GlassIconButton(
-                Icons.Filled.AutoAwesome,
-                contentDescription = "Ask AI",
-                onClick = onAskAi,
-            )
-            // Profile avatar placeholder — circle with initials.
-            Box(
-                modifier = Modifier
-                    .size(42.dp)
-                    .clip(CircleShape)
-                    .background(
-                        Brush.linearGradient(
-                            listOf(
-                                MaterialTheme.colorScheme.primary,
-                                MaterialTheme.colorScheme.tertiary,
-                            )
-                        )
-                    ),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    initial,
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onPrimary,
-                )
-            }
-        }
+        GlassIconButton(
+            Icons.Filled.Search,
+            contentDescription = "Search",
+            onClick = onSearch,
+        )
     }
 }
 

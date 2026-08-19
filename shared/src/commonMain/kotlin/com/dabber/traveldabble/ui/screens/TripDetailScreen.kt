@@ -136,12 +136,12 @@ fun TripDetailScreen(
                     item {
                         Column(modifier = Modifier.padding(horizontal = 20.dp)) {
                             Text(
-                                "Itinerary preview",
+                                "Itinerary (${loadedTrip.days.size} ${if (loadedTrip.days.size == 1) "Day" else "Days"})",
                                 style = MaterialTheme.typography.titleLarge,
                                 color = MaterialTheme.colorScheme.onSurface,
                             )
                             Spacer(Modifier.height(10.dp))
-                            loadedTrip.days.take(3).forEach { day ->
+                            loadedTrip.days.forEach { day ->
                                 GlassCard(
                                     modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
                                     onClick = { onOpenItinerary(loadedTrip.id) },

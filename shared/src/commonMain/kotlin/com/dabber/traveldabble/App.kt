@@ -176,6 +176,8 @@ private fun TravelNavHost(navController: NavHostController) {
                 onExplore = { navController.navigate(Routes.Explore) },
                 onSeeAllTrips = { navController.navigate(Routes.Trips) },
                 onDestinationClick = { navController.navigate(Routes.placeDetail(it)) },
+                onSearch = { navController.navigate(Routes.Explore) },
+                onProfile = { navController.navigate(Routes.Profile) },
             )
         }
         composable(Routes.Trips) {
@@ -295,7 +297,11 @@ private fun TravelNavHost(navController: NavHostController) {
         composable(Routes.CreateTrip) {
             CreateTripScreen(
                 onBack = { navController.popBackStack() },
-                onCreated = { navController.popBackStack() },
+                onCreated = { newTripId ->
+                    navController.navigate(Routes.tripDetail(newTripId)) {
+                        popUpTo(Routes.CreateTrip) { inclusive = true }
+                    }
+                },
             )
         }
         composable(Routes.TripDetail) { entry ->
@@ -348,6 +354,9 @@ private fun TravelNavHost(navController: NavHostController) {
                 },
                 onNavigateToPlanTrip = { _ ->
                     navController.navigate(Routes.CreateTrip)
+                },
+                onNavigateToTripDetail = { newTripId ->
+                    navController.navigate(Routes.tripDetail(newTripId))
                 },
             )
         }

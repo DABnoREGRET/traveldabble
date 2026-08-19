@@ -116,7 +116,7 @@ object AiService {
             }
         }
 
-        // 3. If no server or no key configured, run local intelligent copilot engine
+        // 3. Fall back seamlessly to local intelligent copilot engine
         return runLocalCopilotEngine(userMessage, onToolExecuted)
     }
 
@@ -170,9 +170,13 @@ object AiService {
             }
 
             if (responseJson["error"] != null) {
-                return AiResult.Error(
-                    parseAiErrorMessage(rawResponse) ?: "AI provider returned an error."
-                )
+                val errorMsg = parseAiErrorMessage(rawResponse) ?: "AI provider returned an error."
+                if (errorMsg.contains("provider", ignoreCase = true) ||
+                    errorMsg.contains("overloaded", ignoreCase = true) ||
+                    errorMsg.contains("rate", ignoreCase = true)) {
+                    return null
+                }
+                return AiResult.Error(errorMsg)
             }
 
             val content = responseJson["content"]?.jsonPrimitive?.contentOrNull ?: ""
@@ -254,17 +258,21 @@ object AiService {
                 if (!content.isNullOrBlank()) {
                     AiResult.Success(content, true)
                 } else null
+            } else if (resp.status.value in listOf(429, 500, 502, 503, 504)) {
+                null
             } else {
-                AiResult.Error(
-                    parseAiErrorMessage(resp.bodyAsText())
-                        ?: "AI service error (${resp.status.value})"
-                )
+                val parsed = parseAiErrorMessage(resp.bodyAsText())
+                if (parsed?.contains("provider", ignoreCase = true) == true) null
+                else AiResult.Error(parsed ?: "AI service error (${resp.status.value})")
             }
         } catch (e: io.ktor.client.plugins.ResponseException) {
-            AiResult.Error(
-                parseAiErrorMessage(runCatching { e.response.bodyAsText() }.getOrNull())
-                    ?: "AI service error (${e.response.status.value})"
-            )
+            if (e.response.status.value in listOf(429, 500, 502, 503, 504)) {
+                null
+            } else {
+                val parsed = parseAiErrorMessage(runCatching { e.response.bodyAsText() }.getOrNull())
+                if (parsed?.contains("provider", ignoreCase = true) == true) null
+                else AiResult.Error(parsed ?: "AI service error (${e.response.status.value})")
+            }
         } catch (_: Exception) {
             null
         }

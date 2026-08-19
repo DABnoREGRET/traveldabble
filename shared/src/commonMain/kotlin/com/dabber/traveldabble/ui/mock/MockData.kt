@@ -19,6 +19,8 @@ object MockData {
         Place("vn7", "Sung Sot (Surprise) Cave", PlaceCategory.SIGHT, 20.8755, 107.0911, 4.9f, "Massive limestone chamber with dramatic stalactite formations in Ha Long Bay.", "8:00 - 16:30"),
         Place("vn8", "Ti Top Island Peak", PlaceCategory.ACTIVITY, 20.8600, 107.0780, 4.8f, "Crescent beach and 400-step climb for the most iconic 360-degree panorama of the bay.", "7:30 - 17:00"),
         Place("vn9", "Luon Cave Lagoon", PlaceCategory.ACTIVITY, 20.8711, 107.0850, 4.7f, "Kayak through a sea cave tunnel into a secluded lagoon home to golden monkeys.", "8:00 - 17:00"),
+        Place("vn35", "Hang Gai Silk Street & Tailor Shops", PlaceCategory.ACTIVITY, 21.0315, 105.8502, 4.8f, "Famous Hanoi silk street with bespoke tailors, embroidery boutiques, and traditional crafts.", "8:30 - 21:00"),
+        Place("vn36", "Dong Xuan Market & Souvenirs", PlaceCategory.FOOD, 21.0384, 105.8497, 4.6f, "Hanoi's largest wholesale & souvenir market filled with spices, dried tea, ceramics, and textiles.", "6:00 - 20:00"),
     )
 
     val centralPlaces = listOf(
@@ -30,6 +32,7 @@ object MockData {
         Place("vn15", "Marble Mountains", PlaceCategory.SIGHT, 16.0041, 108.2633, 4.7f, "Five limestone peaks housing Buddhist grottoes, pagodas, and panoramic sea views.", "7:00 - 17:00"),
         Place("vn16", "My Khe Beach", PlaceCategory.ACTIVITY, 16.0592, 108.2467, 4.8f, "Wide golden sand beach with gentle surf, beach clubs, and palm trees.", "Always open"),
         Place("vn17", "Dragon Bridge Fire Show", PlaceCategory.SIGHT, 16.0611, 108.2272, 4.8f, "Iconic dragon-shaped bridge breathing fire and water every weekend at 21:00.", "21:00 Sat & Sun"),
+        Place("vn37", "Hoi An Lantern & Craft Workshops", PlaceCategory.ACTIVITY, 15.8778, 108.3275, 4.9f, "Artisan street with handmade silk lantern workshops, custom leather craft, and ceramic studios.", "8:00 - 22:00"),
     )
 
     val haGiangPlaces = listOf(
@@ -49,6 +52,7 @@ object MockData {
         Place("vn28", "Cuc Gach Quan Dining", PlaceCategory.FOOD, 10.7915, 106.6872, 4.7f, "Traditional country-style Vietnamese homecooking in a restored French villa.", "9:00 - 23:00"),
         Place("vn29", "Cu Chi Tunnels Historical Complex", PlaceCategory.ACTIVITY, 11.1432, 106.4632, 4.7f, "Intricate underground tunnel network stretching over 250 kilometers.", "7:00 - 17:00"),
         Place("vn30", "Cai Rang Floating Market", PlaceCategory.ACTIVITY, 10.0058, 105.7483, 4.8f, "Vibrant Mekong Delta floating market with wooden boats selling fruits and noodle soup.", "5:00 - 11:00"),
+        Place("vn38", "The Cafe Apartments (Boutique Shops & Cafes)", PlaceCategory.ACTIVITY, 10.7744, 106.7028, 4.8f, "9-story vintage apartment block packed with trendy fashion boutiques, indie crafts, and artisan coffee.", "8:00 - 22:30"),
     )
 
     val ninhBinhPlaces = listOf(

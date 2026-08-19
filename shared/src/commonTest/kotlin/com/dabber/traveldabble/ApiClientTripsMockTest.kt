@@ -2,6 +2,7 @@ package com.dabber.traveldabble
 
 import com.dabber.traveldabble.data.ApiClient
 import com.dabber.traveldabble.data.CreateTripRequest
+import com.dabber.traveldabble.data.Repository
 import io.ktor.client.engine.mock.respond
 import io.ktor.client.request.HttpRequestData
 import io.ktor.http.HttpHeaders
@@ -9,6 +10,7 @@ import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
 import kotlinx.coroutines.test.runTest
+import kotlinx.datetime.LocalDate
 import kotlin.test.*
 
 class ApiClientTripsMockTest {
@@ -190,5 +192,92 @@ class ApiClientTripsMockTest {
 
         val healthy = ApiClient.testConnection()
         assertFalse(healthy)
+    }
+
+    @Test
+    fun testParseDateStringToLocalDateVariousFormats() {
+        val date1 = Repository.parseDateStringToLocalDate("Oct 15, 2026")
+        assertNotNull(date1)
+        assertEquals(LocalDate(2026, 10, 15), date1)
+
+        val date2 = Repository.parseDateStringToLocalDate("18 Oct 2026")
+        assertNotNull(date2)
+        assertEquals(LocalDate(2026, 10, 18), date2)
+
+        val date3 = Repository.parseDateStringToLocalDate("2026-10-15")
+        assertNotNull(date3)
+        assertEquals(LocalDate(2026, 10, 15), date3)
+    }
+
+    @Test
+    fun testGenerateDayPlanLabelsFourDays() {
+        val labels = Repository.generateDayPlanLabels("Oct 15, 2026", "Oct 18, 2026")
+        assertEquals(4, labels.size)
+        assertEquals("Oct 15, 2026", labels[0])
+        assertEquals("Oct 16, 2026", labels[1])
+        assertEquals("Oct 17, 2026", labels[2])
+        assertEquals("Oct 18, 2026", labels[3])
+    }
+
+    @Test
+    fun testGenerateDayPlanLabelsSingleDay() {
+        val labels = Repository.generateDayPlanLabels("Oct 15, 2026", "Oct 15, 2026")
+        assertEquals(1, labels.size)
+        assertEquals("Oct 15, 2026", labels[0])
+    }
+
+    @Test
+    fun testGenerateDayPlanLabelsSevenDays() {
+        val labels = Repository.generateDayPlanLabels("Oct 10, 2026", "Oct 16, 2026")
+        assertEquals(7, labels.size)
+        assertEquals("Oct 10, 2026", labels[0])
+        assertEquals("Oct 16, 2026", labels[6])
+    }
+
+    @Test
+    fun testCreateTripGeneratesExactDays() = runTest {
+        val trip = Repository.createTrip(
+            title = "Vietnam 4-Day Tour",
+            destination = "Hanoi",
+            country = "Vietnam",
+            startDate = "Oct 15, 2026",
+            endDate = "Oct 18, 2026",
+            travelers = 2,
+        )
+
+        assertNotNull(trip)
+        assertEquals(4, trip.days.size)
+        assertEquals(1, trip.days[0].dayNumber)
+        assertEquals("Oct 15, 2026", trip.days[0].dateLabel)
+        assertEquals(2, trip.days[1].dayNumber)
+        assertEquals("Oct 16, 2026", trip.days[1].dateLabel)
+        assertEquals(3, trip.days[2].dayNumber)
+        assertEquals("Oct 17, 2026", trip.days[2].dateLabel)
+        assertEquals(4, trip.days[3].dayNumber)
+        assertEquals("Oct 18, 2026", trip.days[3].dateLabel)
+    }
+
+    @Test
+    fun testAddDayToTripAppendsNextSequentialDay() = runTest {
+        val trip = Repository.createTrip(
+            title = "Mini Trip",
+            destination = "Da Nang",
+            country = "Vietnam",
+            startDate = "Nov 1, 2026",
+            endDate = "Nov 2, 2026",
+            travelers = 1,
+        )
+
+        assertNotNull(trip)
+        assertEquals(2, trip.days.size)
+
+        val addedDay = Repository.addDayToTrip(trip.id)
+        assertNotNull(addedDay)
+        assertEquals(3, addedDay.dayNumber)
+        assertEquals("Nov 3, 2026", addedDay.dateLabel)
+
+        val refreshed = Repository.getTrip(trip.id)
+        assertNotNull(refreshed)
+        assertEquals(3, refreshed.days.size)
     }
 }

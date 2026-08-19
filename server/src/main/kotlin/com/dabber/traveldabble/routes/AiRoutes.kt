@@ -276,6 +276,13 @@ fun Route.AiRoutes() {
     }
 }
 
+private val DEFAULT_FALLBACK_MODELS = listOf(
+    "meta-llama/llama-3.3-70b-instruct:free",
+    "mistralai/mistral-small-24b-instruct-2501:free",
+    "google/gemma-4-26b-a4b-it:free",
+    "qwen/qwen-2.5-72b-instruct:free",
+)
+
 private suspend fun runToolLoop(
     apiKey: String,
     model: String,
@@ -283,129 +290,150 @@ private suspend fun runToolLoop(
     tools: kotlinx.serialization.json.JsonArray?,
     byok: Boolean = false,
 ): JsonObject {
-    val messages = initialMessages.toMutableList()
-    var round = 0
-    var activeTools = tools
+    val candidateModels = (listOf(model) + DEFAULT_FALLBACK_MODELS).distinct()
+    var lastException: AiProviderException? = null
 
-    while (round < MAX_TOOL_ROUNDS) {
-        round++
+    for (currentModel in candidateModels) {
+        val messages = initialMessages.toMutableList()
+        var round = 0
+        var activeTools = tools
 
-        val requestBody = buildJsonObject {
-            put("model", JsonPrimitive(model))
-            put("messages", kotlinx.serialization.json.JsonArray(messages))
-            put("max_tokens", JsonPrimitive(2048))
-            put("temperature", JsonPrimitive(0.7))
-            if (activeTools != null && activeTools.isNotEmpty()) {
-                put("tools", activeTools)
+        try {
+            while (round < MAX_TOOL_ROUNDS) {
+                round++
+
+                val requestBody = buildJsonObject {
+                    put("model", JsonPrimitive(currentModel))
+                    put("messages", kotlinx.serialization.json.JsonArray(messages))
+                    put("max_tokens", JsonPrimitive(2048))
+                    put("temperature", JsonPrimitive(0.7))
+                    if (activeTools != null && activeTools.isNotEmpty()) {
+                        put("tools", activeTools)
+                    }
+                }
+
+                val openRouterResponse = httpClient.clientPost(OPENROUTER_URL) {
+                    header("Authorization", "Bearer $apiKey")
+                    header("HTTP-Referer", "https://traveldabble.app")
+                    header("X-Title", "TravelDabble")
+                    contentType(ContentType.Application.Json)
+                    setBody(requestBody.toString())
+                }
+
+                val responseText = openRouterResponse.bodyAsText()
+
+                if (openRouterResponse.status.value !in 200..299) {
+                    // If tools were provided and caused a 400/422 (e.g. model does not support tools),
+                    // automatically retry immediately without tools!
+                    if (activeTools != null && (openRouterResponse.status.value == 400 || openRouterResponse.status.value == 422)) {
+                        activeTools = null
+                        continue
+                    }
+
+                    throw AiProviderException(
+                        status = openRouterResponse.status,
+                        message = providerErrorMessage(responseText, openRouterResponse.status),
+                    )
+                }
+
+                val responseJson = try {
+                    Json.parseToJsonElement(responseText).jsonObject
+                } catch (_: Exception) {
+                    return buildJsonObject {
+                        put("content", JsonPrimitive("Received unparseable AI response."))
+                        put("model", JsonPrimitive(currentModel))
+                        put("byok", JsonPrimitive(byok))
+                    }
+                }
+
+                val choices = responseJson["choices"]?.jsonArray
+                val choice = choices?.firstOrNull()?.jsonObject
+                val message = choice?.get("message")?.jsonObject
+
+                if (message == null) {
+                    if (responseJson["error"] != null) {
+                        throw AiProviderException(
+                            status = HttpStatusCode.BadGateway,
+                            message = providerErrorMessage(responseText, HttpStatusCode.BadGateway),
+                        )
+                    }
+                    return buildJsonObject {
+                        put("content", JsonPrimitive("No response message returned from AI service."))
+                        put("model", JsonPrimitive(currentModel))
+                        put("byok", JsonPrimitive(byok))
+                    }
+                }
+
+                val content = message["content"]?.jsonPrimitive?.contentOrNull
+                val toolCalls = message["tool_calls"]?.jsonArray
+
+                if (toolCalls.isNullOrEmpty()) {
+                    return buildJsonObject {
+                        put("content", JsonPrimitive(content ?: ""))
+                        put("model", JsonPrimitive(currentModel))
+                        put("byok", JsonPrimitive(byok))
+                    }
+                }
+
+                val serverResults = mutableListOf<JsonObject>()
+                val clientToolCalls = mutableListOf<JsonObject>()
+                var hasServerTool = false
+
+                for (toolCall in toolCalls) {
+                    val tc = toolCall.jsonObject
+                    val function = tc["function"]?.jsonObject ?: continue
+                    val toolName = function["name"]?.jsonPrimitive?.contentOrNull ?: continue
+                    val toolArgs = function["arguments"]?.jsonPrimitive?.contentOrNull?.let {
+                        try { Json.parseToJsonElement(it).jsonObject } catch (_: Exception) { null }
+                    }
+
+                    if (toolName in SERVER_EXECUTABLE_TOOLS) {
+                        val result = McpTools.callTool(toolName, toolArgs, null)
+                        serverResults.add(buildJsonObject {
+                            put("tool_call_id", tc["id"] ?: JsonPrimitive(""))
+                            put("role", JsonPrimitive("tool"))
+                            put("content", JsonPrimitive(result.toString()))
+                        })
+                        hasServerTool = true
+                    } else {
+                        clientToolCalls.add(buildJsonObject {
+                            put("id", tc["id"] ?: JsonPrimitive(""))
+                            put("name", JsonPrimitive(toolName))
+                            put("arguments", function["arguments"] ?: JsonPrimitive("{}"))
+                        })
+                    }
+                }
+
+                if (hasServerTool) {
+                    messages.add(message)
+                    for (result in serverResults) {
+                        messages.add(result)
+                    }
+                    continue
+                }
+
+                return buildJsonObject {
+                    put("content", JsonPrimitive(content ?: ""))
+                    put("model", JsonPrimitive(currentModel))
+                    put("byok", JsonPrimitive(true))
+                    put("clientToolCalls", kotlinx.serialization.json.JsonArray(clientToolCalls))
+                }
             }
-        }
-
-        val openRouterResponse = httpClient.clientPost(OPENROUTER_URL) {
-            header("Authorization", "Bearer $apiKey")
-            header("HTTP-Referer", "https://traveldabble.app")
-            header("X-Title", "TravelDabble")
-            contentType(ContentType.Application.Json)
-            setBody(requestBody.toString())
-        }
-
-        val responseText = openRouterResponse.bodyAsText()
-
-        if (openRouterResponse.status.value !in 200..299) {
-            // If tools were provided and caused a 400/422 (e.g. model does not support tools),
-            // automatically retry immediately without tools!
-            if (activeTools != null && (openRouterResponse.status.value == 400 || openRouterResponse.status.value == 422)) {
-                activeTools = null
+        } catch (e: AiProviderException) {
+            lastException = e
+            if (e.status.value in listOf(400, 404, 429, 500, 502, 503, 504) ||
+                e.message.contains("provider", ignoreCase = true) ||
+                e.message.contains("rate", ignoreCase = true) ||
+                e.message.contains("overloaded", ignoreCase = true)) {
                 continue
-            }
-
-            throw AiProviderException(
-                status = openRouterResponse.status,
-                message = providerErrorMessage(responseText, openRouterResponse.status),
-            )
-        }
-
-        val responseJson = try {
-            Json.parseToJsonElement(responseText).jsonObject
-        } catch (_: Exception) {
-            return buildJsonObject {
-                put("content", JsonPrimitive("Received unparseable AI response."))
-                put("model", JsonPrimitive(model))
-                put("byok", JsonPrimitive(byok))
-            }
-        }
-
-        val choices = responseJson["choices"]?.jsonArray
-        val choice = choices?.firstOrNull()?.jsonObject
-        val message = choice?.get("message")?.jsonObject
-
-        if (message == null) {
-            if (responseJson["error"] != null) {
-                throw AiProviderException(
-                    status = HttpStatusCode.BadGateway,
-                    message = providerErrorMessage(responseText, HttpStatusCode.BadGateway),
-                )
-            }
-            return buildJsonObject {
-                put("content", JsonPrimitive("No response message returned from AI service."))
-                put("model", JsonPrimitive(model))
-                put("byok", JsonPrimitive(byok))
-            }
-        }
-
-        val content = message["content"]?.jsonPrimitive?.contentOrNull
-        val toolCalls = message["tool_calls"]?.jsonArray
-
-        if (toolCalls.isNullOrEmpty()) {
-            return buildJsonObject {
-                put("content", JsonPrimitive(content ?: ""))
-                put("model", JsonPrimitive(model))
-                put("byok", JsonPrimitive(byok))
-            }
-        }
-
-        val serverResults = mutableListOf<JsonObject>()
-        val clientToolCalls = mutableListOf<JsonObject>()
-        var hasServerTool = false
-
-        for (toolCall in toolCalls) {
-            val tc = toolCall.jsonObject
-            val function = tc["function"]?.jsonObject ?: continue
-            val toolName = function["name"]?.jsonPrimitive?.contentOrNull ?: continue
-            val toolArgs = function["arguments"]?.jsonPrimitive?.contentOrNull?.let {
-                try { Json.parseToJsonElement(it).jsonObject } catch (_: Exception) { null }
-            }
-
-            if (toolName in SERVER_EXECUTABLE_TOOLS) {
-                val result = McpTools.callTool(toolName, toolArgs, null)
-                serverResults.add(buildJsonObject {
-                    put("tool_call_id", tc["id"] ?: JsonPrimitive(""))
-                    put("role", JsonPrimitive("tool"))
-                    put("content", JsonPrimitive(result.toString()))
-                })
-                hasServerTool = true
             } else {
-                clientToolCalls.add(buildJsonObject {
-                    put("id", tc["id"] ?: JsonPrimitive(""))
-                    put("name", JsonPrimitive(toolName))
-                    put("arguments", function["arguments"] ?: JsonPrimitive("{}"))
-                })
+                throw e
             }
         }
+    }
 
-        if (hasServerTool) {
-            messages.add(message)
-            for (result in serverResults) {
-                messages.add(result)
-            }
-            continue
-        }
-
-        return buildJsonObject {
-            put("content", JsonPrimitive(content ?: ""))
-            put("model", JsonPrimitive(model))
-            put("byok", JsonPrimitive(true))
-            put("clientToolCalls", kotlinx.serialization.json.JsonArray(clientToolCalls))
-        }
+    if (lastException != null) {
+        throw lastException
     }
 
     return buildJsonObject {

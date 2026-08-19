@@ -68,10 +68,14 @@ fun ItineraryScreen(
     onPlaceClick: (String) -> Unit,
 ) {
     var trip by remember { mutableStateOf<Trip?>(null) }
+    var availablePlaces by remember { mutableStateOf<List<Place>>(emptyList()) }
     var selectedDay by remember { mutableIntStateOf(0) }
     var showAddActivityDialog by remember { mutableStateOf(false) }
     var activityTitle by remember { mutableStateOf("") }
+    var activityAddress by remember { mutableStateOf("") }
     var activityCategory by remember { mutableStateOf(PlaceCategory.SIGHT) }
+    var selectedPlaceLat by remember { mutableStateOf(21.0285) }
+    var selectedPlaceLng by remember { mutableStateOf(105.8542) }
     var startTimeInput by remember { mutableStateOf("09:00") }
     var endTimeInput by remember { mutableStateOf("11:00") }
     var activityNote by remember { mutableStateOf("") }
@@ -80,6 +84,7 @@ fun ItineraryScreen(
 
     LaunchedEffect(tripId) {
         trip = Repository.getTrip(tripId)?.toUi()
+        availablePlaces = Repository.getPlaces()
     }
 
     val loadedTrip = trip
@@ -97,15 +102,56 @@ fun ItineraryScreen(
             onDismissRequest = { showAddActivityDialog = false },
             title = { Text("Add Activity to Day ${day.dayNumber}") },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
                     OutlinedTextField(
                         value = activityTitle,
                         onValueChange = { activityTitle = it },
                         label = { Text("Place or Activity Name") },
-                        placeholder = { Text("e.g. Hoan Kiem Lake walking tour") },
+                        placeholder = { Text("e.g. Dong Xuan Market or Old Quarter") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                     )
+                    OutlinedTextField(
+                        value = activityAddress,
+                        onValueChange = { activityAddress = it },
+                        label = { Text("Address / Location") },
+                        placeholder = { Text("e.g. Dong Xuan St, Hoan Kiem, Hanoi") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+
+                    // Quick select from destination places & shops
+                    if (availablePlaces.isNotEmpty()) {
+                        Text(
+                            "Or choose from popular spots & shops:",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            availablePlaces.take(8).forEach { p ->
+                                GlassChip(
+                                    label = p.name,
+                                    selected = activityTitle == p.name,
+                                    onClick = {
+                                        activityTitle = p.name
+                                        activityCategory = p.category
+                                        activityAddress = p.description
+                                        selectedPlaceLat = p.lat
+                                        selectedPlaceLng = p.lng
+                                    },
+                                )
+                            }
+                        }
+                    }
+
                     Text("Category", style = MaterialTheme.typography.labelMedium)
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -154,7 +200,7 @@ fun ItineraryScreen(
                         value = activityNote,
                         onValueChange = { activityNote = it },
                         label = { Text("Notes (optional)") },
-                        placeholder = { Text("e.g. Bring camera and water bottle") },
+                        placeholder = { Text("e.g. Bring camera and local cash") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                     )
@@ -168,10 +214,10 @@ fun ItineraryScreen(
                                 id = "place_${System.currentTimeMillis()}",
                                 name = activityTitle.trim(),
                                 category = activityCategory,
-                                lat = 21.0285,
-                                lng = 105.8542,
+                                lat = selectedPlaceLat,
+                                lng = selectedPlaceLng,
                                 rating = 4.8f,
-                                description = activityNote.ifBlank { "${activityTitle.trim()} in ${loadedTrip?.destination ?: "Vietnam"}" },
+                                description = activityAddress.ifBlank { activityNote.ifBlank { "${activityTitle.trim()} in ${loadedTrip?.destination ?: "Vietnam"}" } },
                             )
                             scope.launch {
                                 Repository.addActivityToTrip(
@@ -180,11 +226,12 @@ fun ItineraryScreen(
                                     place = newPlace,
                                     startTime = startTimeInput.trim().ifBlank { "09:00" },
                                     endTime = endTimeInput.trim().ifBlank { "11:00" },
-                                    note = activityNote.takeIf { it.isNotBlank() },
+                                    note = activityNote.takeIf { it.isNotBlank() } ?: activityAddress.takeIf { it.isNotBlank() },
                                 )
                                 trip = Repository.getTrip(tripId)?.toUi()
                             }
                             activityTitle = ""
+                            activityAddress = ""
                             activityNote = ""
                             showAddActivityDialog = false
                         }
@@ -268,6 +315,7 @@ fun ItineraryScreen(
                     .horizontalScroll(rememberScrollState())
                     .padding(horizontal = 16.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
                 loadedTrip.days.forEachIndexed { index, d ->
                     GlassChip(
@@ -276,9 +324,53 @@ fun ItineraryScreen(
                         onClick = { selectedDay = index },
                     )
                 }
+
+                GlassChip(
+                    label = "+ Add Day",
+                    selected = false,
+                    onClick = {
+                        scope.launch {
+                            val newDay = Repository.addDayToTrip(tripId)
+                            val updatedTrip = Repository.getTrip(tripId)?.toUi()
+                            trip = updatedTrip
+                            if (updatedTrip != null) {
+                                selectedDay = updatedTrip.days.size - 1
+                            }
+                        }
+                    }
+                )
             }
 
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(10.dp))
+
+            if (day != null) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column {
+                        Text(
+                            "Day ${day.dayNumber}",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Text(
+                            day.dateLabel.ifBlank { "Day ${day.dayNumber}" },
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                    Text(
+                        "${day.activities.size} ${if (day.activities.size == 1) "activity" else "activities"}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Spacer(Modifier.height(6.dp))
+            }
 
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
